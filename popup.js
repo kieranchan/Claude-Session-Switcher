@@ -3,18 +3,22 @@ const CLAUDE_URL = "https://claude.ai";
 const COOKIE_NAME = "sessionKey";
 const COOKIE_DOMAIN = ".claude.ai";
 
-let editingIndex = -1;
-let dragStartIndex = -1; // 记录被拖拽项的索引
+// 状态变量
+let editingIndex = -1;  // 当前正在编辑的索引
+let dragStartIndex = -1; // 拖拽起始索引
 
 document.addEventListener('DOMContentLoaded', async () => {
     refreshList();
 
-    // 基础功能
+    // 基础操作绑定
     document.getElementById('addBtn').addEventListener('click', handleSaveOrUpdate);
     document.getElementById('grabBtn').addEventListener('click', autoGrabKey);
     document.getElementById('clearBtn').addEventListener('click', resetFormAndLogout);
 
-    // 导入导出功能
+    // 搜索绑定
+    document.getElementById('searchBox').addEventListener('input', filterAccounts);
+
+    // 导入导出绑定
     document.getElementById('exportBtn').addEventListener('click', exportData);
     document.getElementById('importBtn').addEventListener('click', () => document.getElementById('fileInput').click());
     document.getElementById('fileInput').addEventListener('change', handleImportFile);
@@ -36,9 +40,11 @@ async function handleSaveOrUpdate() {
     const { accounts = [] } = await chrome.storage.local.get('accounts');
 
     if (editingIndex >= 0) {
+        // --- 更新模式 ---
         accounts[editingIndex] = { name, key };
         editingIndex = -1;
     } else {
+        // --- 新增模式 ---
         if (accounts.some(a => a.key === key)) {
             alert("这个 Key 已经存在了");
             return;
@@ -51,21 +57,21 @@ async function handleSaveOrUpdate() {
     refreshList();
 }
 
-/* ================== UI 渲染与拖拽逻辑 ================== */
+/* ================== 列表渲染、搜索与拖拽 ================== */
 
 async function refreshList() {
     const { accounts = [] } = await chrome.storage.local.get('accounts');
     const listEl = document.getElementById('accountList');
     listEl.innerHTML = '';
 
+    // 获取当前 Cookie 用于高亮
     const currentCookie = await chrome.cookies.get({ url: CLAUDE_URL, name: COOKIE_NAME });
     const currentVal = currentCookie ? decodeURIComponent(currentCookie.value) : "";
 
     accounts.forEach((acc, index) => {
         const li = document.createElement('li');
-        // 开启拖拽
-        li.setAttribute('draggable', true);
-        li.dataset.index = index;
+        li.setAttribute('draggable', true); // 开启拖拽
+        li.dataset.index = index; // 存储真实索引
 
         if (currentVal === acc.key) li.classList.add('active');
 
@@ -84,20 +90,24 @@ async function refreshList() {
         // 绑定拖拽事件
         addDragEvents(li, index);
 
-        // 绑定按钮事件
-        li.addEventListener('click', (e) => {
-            // 如果点的是按钮，不触发切换
-            if(e.target.closest('button')) return;
-            switchAccount(acc.key);
+        // 点击切换
+        li.querySelector('.account-info').addEventListener('click', (e) => switchAccount(acc.key));
+
+        // 复制
+        li.querySelector('.copy-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            handleCopy(acc.key, e.target);
         });
 
-        li.querySelector('.copy-btn').addEventListener('click', (e) => handleCopy(acc.key, e.target));
-
-        li.querySelector('.edit-btn').addEventListener('click', () => {
+        // 编辑
+        li.querySelector('.edit-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
             startEdit(index, acc.name, acc.key);
         });
 
-        li.querySelector('.del-btn').addEventListener('click', async () => {
+        // 删除
+        li.querySelector('.del-btn').addEventListener('click', async (e) => {
+            e.stopPropagation();
             if(confirm(`确定删除 ${acc.name} 吗？`)) {
                 accounts.splice(index, 1);
                 await chrome.storage.local.set({ accounts });
@@ -108,29 +118,49 @@ async function refreshList() {
 
         listEl.appendChild(li);
     });
+
+    // 如果搜索框里有字，重新触发一次过滤，防止列表刷新后搜索失效
+    const searchVal = document.getElementById('searchBox').value;
+    if (searchVal) {
+        // 手动触发 input 事件逻辑
+        const event = { target: document.getElementById('searchBox') };
+        filterAccounts(event);
+    }
 }
 
+// 搜索过滤逻辑
+function filterAccounts(e) {
+    const term = e.target.value.toLowerCase();
+    const listItems = document.querySelectorAll('#accountList li');
+
+    listItems.forEach(li => {
+        const name = li.querySelector('.account-name').textContent.toLowerCase();
+        if (name.includes(term)) {
+            li.style.display = 'flex';
+        } else {
+            li.style.display = 'none';
+        }
+    });
+}
+
+// 拖拽逻辑
 function addDragEvents(li, index) {
     li.addEventListener('dragstart', () => {
         dragStartIndex = index;
         li.classList.add('dragging');
     });
-
     li.addEventListener('dragover', (e) => {
-        e.preventDefault(); // 允许放置
+        e.preventDefault();
         li.classList.add('drag-over');
     });
-
     li.addEventListener('dragleave', () => {
         li.classList.remove('drag-over');
     });
-
     li.addEventListener('drop', async () => {
         li.classList.remove('drag-over');
         const dragEndIndex = index;
         swapItems(dragStartIndex, dragEndIndex);
     });
-
     li.addEventListener('dragend', () => {
         li.classList.remove('dragging');
         document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
@@ -139,42 +169,32 @@ function addDragEvents(li, index) {
 
 async function swapItems(fromIndex, toIndex) {
     if (fromIndex === toIndex) return;
-
     const { accounts = [] } = await chrome.storage.local.get('accounts');
-    const itemMoved = accounts.splice(fromIndex, 1)[0]; // 移除旧位置
-    accounts.splice(toIndex, 0, itemMoved); // 插入新位置
-
+    const itemMoved = accounts.splice(fromIndex, 1)[0];
+    accounts.splice(toIndex, 0, itemMoved);
     await chrome.storage.local.set({ accounts });
     refreshList();
 }
 
-/* ================== 导入导出功能 ================== */
+/* ================== 导入导出 (JSON/TXT) ================== */
 
-// 导出格式：Name|sk-ant-xxx (每行一个)
 async function exportData() {
     const { accounts = [] } = await chrome.storage.local.get('accounts');
     if (accounts.length === 0) {
         alert("列表为空，无法导出");
         return;
     }
-
-    // 组装文本内容
-    let content = "Format: Name|Key (Don't change this line)\n";
-    accounts.forEach(acc => {
-        content += `${acc.name}|${acc.key}\n`;
-    });
-
-    // 创建 Blob 并下载
-    const blob = new Blob([content], { type: 'text/plain' });
+    // 使用 JSON 格式导出
+    const content = JSON.stringify(accounts, null, 2);
+    const blob = new Blob([content], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `claude_accounts_${new Date().toISOString().slice(0,10)}.txt`;
+    a.download = `claude_accounts_${new Date().toISOString().slice(0,10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
 }
 
-// 导入功能
 async function handleImportFile(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -182,47 +202,52 @@ async function handleImportFile(event) {
     const reader = new FileReader();
     reader.onload = async (e) => {
         const text = e.target.result;
-        const lines = text.split('\n');
+        let newAccounts = [];
+
+        try {
+            // 优先尝试 JSON
+            newAccounts = JSON.parse(text);
+            if (!Array.isArray(newAccounts)) throw new Error("Not Array");
+        } catch (err) {
+            // 失败则尝试 TXT 解析 (兼容旧版)
+            console.log("JSON parse failed, trying TXT...");
+            const lines = text.split('\n');
+            lines.forEach(line => {
+                line = line.trim();
+                if (!line || line.startsWith("Format:")) return;
+                let parts = [];
+                if (line.includes('|')) parts = line.split('|');
+                else if (line.includes(',')) {
+                    const idx = line.indexOf(',');
+                    parts = [line.slice(0, idx), line.slice(idx + 1)];
+                }
+                if (parts.length >= 2) newAccounts.push({ name: parts[0].trim(), key: parts[1].trim() });
+            });
+        }
+
+        if (newAccounts.length === 0) {
+            alert("文件格式无法识别或内容为空");
+            return;
+        }
 
         const { accounts = [] } = await chrome.storage.local.get('accounts');
-        let successCount = 0;
-
-        lines.forEach(line => {
-            line = line.trim();
-            // 跳过空行和格式说明行
-            if (!line || line.startsWith("Format:")) return;
-
-            // 支持两种分隔符：竖线 | 或者 逗号 ,
-            let parts = [];
-            if (line.includes('|')) {
-                parts = line.split('|');
-            } else if (line.includes(',')) {
-                // 如果用户自己手写逗号分隔
-                const idx = line.indexOf(',');
-                parts = [line.slice(0, idx), line.slice(idx + 1)];
-            }
-
-            if (parts.length >= 2) {
-                const name = parts[0].trim();
-                const key = parts[1].trim();
-
-                // 只有 Key 看起来像真的才导入
-                if (key.startsWith("sk-ant") && !accounts.some(a => a.key === key)) {
-                    accounts.push({ name, key });
-                    successCount++;
-                }
+        let count = 0;
+        newAccounts.forEach(nw => {
+            if (nw.key && nw.key.startsWith("sk-ant") && !accounts.some(a => a.key === nw.key)) {
+                accounts.push({ name: nw.name || "未命名", key: nw.key });
+                count++;
             }
         });
 
         await chrome.storage.local.set({ accounts });
-        alert(`成功导入 ${successCount} 个新账号！`);
+        alert(`成功导入 ${count} 个新账号`);
         refreshList();
-        event.target.value = ''; // 重置 input 允许再次选择同名文件
+        event.target.value = '';
     };
     reader.readAsText(file);
 }
 
-/* ================== 辅助功能（保持不变） ================== */
+/* ================== 辅助函数：复制、编辑、获取、切换 ================== */
 
 function startEdit(index, name, key) {
     editingIndex = index;
@@ -256,9 +281,7 @@ async function resetFormAndLogout() {
     try {
         await chrome.cookies.remove({ url: CLAUDE_URL, name: COOKIE_NAME });
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tabs[0] && tabs[0].url.includes("claude.ai")) {
-            chrome.tabs.reload(tabs[0].id);
-        }
+        if (tabs[0] && tabs[0].url.includes("claude.ai")) chrome.tabs.reload(tabs[0].id);
         refreshList();
     } catch (e) {}
 }

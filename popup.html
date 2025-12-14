@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Claude Switcher</title>
     <style>
-        body { width: 340px; padding: 15px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9f9f9; display: flex; flex-direction: column; height: 100%; min-height: 400px;}
+        body { width: 340px; padding: 15px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9f9f9; display: flex; flex-direction: column; height: 100%; min-height: 450px;}
         h3 { margin-top: 0; color: #333; border-bottom: 2px solid #d97757; padding-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
 
         /* 输入框区域 */
@@ -22,19 +22,31 @@
         #addBtn.updating { background-color: #2980b9; }
         #clearBtn { background-color: #eee; color: #333; flex: 1; border: 1px solid #ddd; padding: 8px; }
 
+        /* 搜索框 */
+        #searchBox { margin-top: 10px; border-radius: 20px; text-align: center; background: #f1f1f1; font-size: 12px; border: 1px solid #eee; padding: 5px;}
+
         /* 列表区域 */
-        ul { list-style: none; padding: 0; margin-top: 15px; flex-grow: 1; overflow-y: auto; max-height: 300px; }
+        ul { list-style: none; padding: 0; margin-top: 5px; flex-grow: 1; overflow-y: auto; max-height: 300px; }
         li { background: white; border-bottom: 1px solid #eee; padding: 10px; display: flex; align-items: center; justify-content: space-between; transition: background 0.2s; cursor: grab; }
         li:first-child { border-top-left-radius: 8px; border-top-right-radius: 8px; }
         li:last-child { border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; border-bottom: none; }
         li:hover { background-color: #fff0eb; }
         li.active { border-left: 3px solid #2ecc71; }
 
-        /* 拖拽时的样式 */
-        li.dragging { opacity: 0.5; background: #e0e0e0; border: 2px dashed #999; }
+        /* 拖拽样式 */
+        li.dragging { opacity: 0.5; background: #e0e0e0; border: 2px dashed #999; cursor: grabbing; }
         li.drag-over { border-top: 2px solid #d97757; }
 
-        .account-info { flex-grow: 1; overflow: hidden; margin-right: 5px; pointer-events: none; /* 防止拖拽时选中文字 */ }
+        /* --- 修复点：恢复点击事件，只禁止文字选择 --- */
+        .account-info {
+            flex-grow: 1;
+            overflow: hidden;
+            margin-right: 5px;
+            cursor: pointer;       /* 鼠标放上去变小手 */
+            user-select: none;     /* 禁止选中文字（防止拖拽时变蓝） */
+            pointer-events: auto;  /* 关键修复：确保能接收点击 */
+        }
+
         .account-name { font-weight: 600; font-size: 14px; display: block; }
         .account-key { font-size: 11px; color: #999; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -47,7 +59,7 @@
         .del-btn:hover { background: #ffebeb; color: red; }
 
         /* 底部工具栏 */
-        .footer-tools { margin-top: 15px; display: flex; justify-content: space-between; gap: 10px; padding-top: 10px; border-top: 1px solid #eee; }
+        .footer-tools { margin-top: auto; display: flex; justify-content: space-between; gap: 10px; padding-top: 10px; border-top: 1px solid #eee; }
         .footer-btn { flex: 1; background: #fff; border: 1px solid #ccc; color: #555; font-size: 12px; }
         .footer-btn:hover { background: #f5f5f5; border-color: #aaa; }
     </style>
@@ -70,14 +82,16 @@
     </div>
 </div>
 
+<input type="text" id="searchBox" placeholder="🔍 搜索已保存的账号..." />
+
 <ul id="accountList">
 </ul>
 
-<input type="file" id="fileInput" accept=".txt,.json" style="display: none;" />
+<input type="file" id="fileInput" accept=".json,.txt" style="display: none;" />
 
 <div class="footer-tools">
-    <button id="exportBtn" class="footer-btn">📤 导出配置</button>
-    <button id="importBtn" class="footer-btn">📥 导入配置</button>
+    <button id="exportBtn" class="footer-btn">📤 导出备份</button>
+    <button id="importBtn" class="footer-btn">📥 导入备份</button>
 </div>
 
 <script src="popup.js"></script>
