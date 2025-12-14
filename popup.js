@@ -6,34 +6,26 @@ const COOKIE_DOMAIN = ".claude.ai";
 // 状态变量
 let editingIndex = -1;
 let dragStartIndex = -1;
-let currentIP = ""; // 存储当前 IP 用于跳转查询
+let currentIP = "";
 
 document.addEventListener('DOMContentLoaded', async () => {
-    refreshList();
-    checkNetworkInfo(); // 启动检测
+    refreshList(); // 初始化加载
+    checkNetworkInfo();
 
     document.getElementById('addBtn').addEventListener('click', handleSaveOrUpdate);
     document.getElementById('grabBtn').addEventListener('click', autoGrabKey);
     document.getElementById('clearBtn').addEventListener('click', resetFormAndLogout);
     document.getElementById('searchBox').addEventListener('input', filterAccounts);
 
-    // IP 区域点击刷新
     document.getElementById('ipCard').addEventListener('click', (e) => {
-        // 如果点的是安全体检按钮，不触发刷新
         if(e.target.closest('#safetyBtn')) return;
-
         document.getElementById('ipText').textContent = "刷新中...";
         checkNetworkInfo();
     });
 
-    // 安全体检跳转
     document.getElementById('safetyBtn').addEventListener('click', () => {
-        if(currentIP) {
-            // 跳转到专业的 IP 欺诈查询网站
-            chrome.tabs.create({ url: `https://scamalytics.com/ip/${currentIP}` });
-        } else {
-            alert("请等待 IP 检测完成");
-        }
+        if(currentIP) chrome.tabs.create({ url: `https://scamalytics.com/ip/${currentIP}` });
+        else alert("请等待 IP 检测完成");
     });
 
     document.getElementById('exportBtn').addEventListener('click', exportData);
@@ -41,67 +33,74 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('fileInput').addEventListener('change', handleImportFile);
 });
 
-/* ================== 新增：网络信息检测 (Geo + ISP) ================== */
-async function checkNetworkInfo() {
+/* ================== 核心功能：切换账号 (含自动聚焦) ================== */
+
+async function switchAccount(key) {
+    if (!key) return;
     try {
-        // 使用 ipwho.is (免费, 无需 Key, 支持 HTTPS, 含 Geo 和 ISP)
-        const response = await fetch('https://ipwho.is/');
-        const data = await response.json();
+        // 1. 先清除旧 Cookie
+        await chrome.cookies.remove({ url: CLAUDE_URL, name: COOKIE_NAME });
 
-        if (data.success) {
-            currentIP = data.ip;
-            document.getElementById('ipText').textContent = data.ip;
+        // 2. 设置新 Cookie
+        await chrome.cookies.set({
+            url: CLAUDE_URL,
+            name: COOKIE_NAME,
+            value: key,
+            domain: COOKIE_DOMAIN,
+            path: "/",
+            secure: true,
+            sameSite: "lax",
+            expirationDate: (Date.now() / 1000) + (86400 * 30)
+        });
 
-            // 显示地理位置: 城市, 国家代码 (如: Los Angeles, US)
-            document.getElementById('geoText').textContent = `${data.city}, ${data.country_code}`;
+        // 3. 处理页面跳转 + 聚焦 (NEW!)
+        const tabs = await chrome.tabs.query({ url: "*://claude.ai/*" });
+        if (tabs.length > 0) {
+            const tabId = tabs[0].id;
+            const windowId = tabs[0].windowId;
 
-            // 显示运营商 (ISP)
-            document.getElementById('ispText').textContent = data.connection.isp || data.connection.org || "未知ISP";
+            // A. 更新 URL 并设置为 "active: true" (这会让标签页跳到最前)
+            await chrome.tabs.update(tabId, {
+                url: "https://claude.ai/chats",
+                active: true
+            });
 
-            // 简单的视觉提示：如果 IP 和当前时区不符，或者看起来正常，改变颜色
-            document.getElementById('geoText').style.color = '#d97757';
+            // B. 确保该标签页所在的窗口也是最顶层的 (防止窗口在后面)
+            await chrome.windows.update(windowId, { focused: true });
         } else {
-            throw new Error("API Limit");
+            // C. 没找到就新建 (新建默认就是 active 的)
+            await chrome.tabs.create({ url: "https://claude.ai/chats" });
         }
+
+        // 4. 立即更新 UI
+        setTimeout(() => refreshList(key), 50);
+
     } catch (e) {
         console.error(e);
-        document.getElementById('ipText').textContent = "检测失败";
-        document.getElementById('geoText').textContent = "网络错误";
+        alert("切换失败");
     }
 }
 
-/* ================== 核心功能 ================== */
+/* ================== 列表渲染 ================== */
 
-async function handleSaveOrUpdate() {
-    const nameInput = document.getElementById('accName');
-    const keyInput = document.getElementById('accKey');
-    const name = nameInput.value.trim();
-    const key = keyInput.value.trim();
-    if (!name || !key) { alert("请填写完整信息"); return; }
-    const { accounts = [] } = await chrome.storage.local.get('accounts');
-    if (editingIndex >= 0) {
-        accounts[editingIndex] = { name, key };
-        editingIndex = -1;
-    } else {
-        if (accounts.some(a => a.key === key)) { alert("Key 已存在"); return; }
-        accounts.push({ name, key });
-    }
-    await chrome.storage.local.set({ accounts });
-    resetFormUI();
-    refreshList();
-}
-
-async function refreshList() {
+async function refreshList(optionalActiveKey = null) {
     const { accounts = [] } = await chrome.storage.local.get('accounts');
     const listEl = document.getElementById('accountList');
     listEl.innerHTML = '';
-    const currentCookie = await chrome.cookies.get({ url: CLAUDE_URL, name: COOKIE_NAME });
-    const currentVal = currentCookie ? decodeURIComponent(currentCookie.value) : "";
+
+    let currentVal = "";
+    if (optionalActiveKey) {
+        currentVal = optionalActiveKey;
+    } else {
+        const currentCookie = await chrome.cookies.get({ url: CLAUDE_URL, name: COOKIE_NAME });
+        currentVal = currentCookie ? decodeURIComponent(currentCookie.value) : "";
+    }
 
     accounts.forEach((acc, index) => {
         const li = document.createElement('li');
         li.setAttribute('draggable', true);
         li.dataset.index = index;
+
         if (currentVal === acc.key) li.classList.add('active');
 
         li.innerHTML = `
@@ -136,7 +135,50 @@ async function refreshList() {
     });
 
     const searchVal = document.getElementById('searchBox').value;
-    if (searchVal) { const event = { target: document.getElementById('searchBox') }; filterAccounts(event); }
+    if (searchVal) {
+        const event = { target: document.getElementById('searchBox') };
+        filterAccounts(event);
+    }
+}
+
+/* ================== 网络检测 ================== */
+
+async function checkNetworkInfo() {
+    try {
+        const response = await fetch('https://ipwho.is/');
+        const data = await response.json();
+        if (data.success) {
+            currentIP = data.ip;
+            document.getElementById('ipText').textContent = data.ip;
+            document.getElementById('geoText').textContent = `${data.city}, ${data.country_code}`;
+            document.getElementById('ispText').textContent = data.connection.isp || data.connection.org || "未知ISP";
+            document.getElementById('geoText').style.color = '#d97757';
+        } else { throw new Error("API Limit"); }
+    } catch (e) {
+        document.getElementById('ipText').textContent = "检测失败";
+        document.getElementById('geoText').textContent = "网络错误";
+    }
+}
+
+/* ================== 其他辅助函数 ================== */
+
+async function handleSaveOrUpdate() {
+    const nameInput = document.getElementById('accName');
+    const keyInput = document.getElementById('accKey');
+    const name = nameInput.value.trim();
+    const key = keyInput.value.trim();
+    if (!name || !key) { alert("请填写完整信息"); return; }
+    const { accounts = [] } = await chrome.storage.local.get('accounts');
+    if (editingIndex >= 0) {
+        accounts[editingIndex] = { name, key };
+        editingIndex = -1;
+    } else {
+        if (accounts.some(a => a.key === key)) { alert("Key 已存在"); return; }
+        accounts.push({ name, key });
+    }
+    await chrome.storage.local.set({ accounts });
+    resetFormUI();
+    refreshList();
 }
 
 function filterAccounts(e) {
@@ -263,20 +305,4 @@ async function autoGrabKey() {
             document.getElementById('accName').focus();
         } else { alert("未登录"); }
     } catch (e) {}
-}
-
-async function switchAccount(key) {
-    if (!key) return;
-    try {
-        await chrome.cookies.remove({ url: CLAUDE_URL, name: COOKIE_NAME });
-        await chrome.cookies.set({
-            url: CLAUDE_URL, name: COOKIE_NAME, value: key,
-            domain: COOKIE_DOMAIN, path: "/", secure: true, sameSite: "lax",
-            expirationDate: (Date.now() / 1000) + (86400 * 30)
-        });
-        const tabs = await chrome.tabs.query({ url: "*://claude.ai/*" });
-        if (tabs.length > 0) chrome.tabs.reload(tabs[0].id);
-        else chrome.tabs.create({ url: CLAUDE_URL });
-        setTimeout(refreshList, 200);
-    } catch (e) { alert("切换失败"); }
 }
