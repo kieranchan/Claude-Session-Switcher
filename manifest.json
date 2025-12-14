@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Claude Session Switcher",
+  "version": "1.1.0",
+  "description": "多账号 Claude sessionKey 快速切换工具",
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Switch Claude Account",
+    "default_icon": "icon.png"
+  },
+  "permissions": [
+    "cookies",
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://claude.ai/*"
+  ]
+}
