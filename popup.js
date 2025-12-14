@@ -77,7 +77,10 @@ async function refreshList() {
 
         li.innerHTML = `
             <div class="account-info" title="点击切换账号">
-                <span class="account-name">${acc.name} <span class="current-badge">Current</span></span>
+                <span class="account-name">
+                    <span class="name-text">${acc.name}</span> 
+                    <span class="current-badge">Current</span>
+                </span>
                 <span class="account-key">Key: ${acc.key.substring(0, 10)}...${acc.key.substring(acc.key.length - 6)}</span>
             </div>
             <div class="action-group">
@@ -134,7 +137,15 @@ function filterAccounts(e) {
     const listItems = document.querySelectorAll('#accountList li');
 
     listItems.forEach(li => {
-        const name = li.querySelector('.account-name').textContent.toLowerCase();
+        // 修改点：只获取 name-text 类的文本，忽略 current-badge
+        // 加上 ?. 也就是可选链，防止有时候元素还没渲染出来报错
+        const nameEl = li.querySelector('.name-text');
+        const name = nameEl ? nameEl.textContent.toLowerCase() : "";
+
+        // 进阶优化：如果想同时也支持搜 Key，可以写成：
+        // const key = li.querySelector('.account-key').textContent.toLowerCase();
+        // if (name.includes(term) || key.includes(term)) { ... }
+
         if (name.includes(term)) {
             li.style.display = 'flex';
         } else {
