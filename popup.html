@@ -27,24 +27,44 @@
 
         /* 列表区域 */
         ul { list-style: none; padding: 0; margin-top: 5px; flex-grow: 1; overflow-y: auto; max-height: 300px; }
-        li { background: white; border-bottom: 1px solid #eee; padding: 10px; display: flex; align-items: center; justify-content: space-between; transition: background 0.2s; cursor: grab; }
+
+        li {
+            background: white;
+            border-bottom: 1px solid #eee;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background 0.2s;
+
+            /* --- 修复点 1: 统一光标，消除闪烁 --- */
+            cursor: pointer;
+        }
+
+        /* --- 修复点 2: 按下鼠标时，显示“抓紧”的手势，增加拖拽感 --- */
+        li:active {
+            cursor: grabbing;
+            background-color: #f0f0f0;
+        }
+
         li:first-child { border-top-left-radius: 8px; border-top-right-radius: 8px; }
         li:last-child { border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; border-bottom: none; }
         li:hover { background-color: #fff0eb; }
         li.active { border-left: 3px solid #2ecc71; }
 
-        /* 拖拽样式 */
+        /* 拖拽过程中的样式 */
         li.dragging { opacity: 0.5; background: #e0e0e0; border: 2px dashed #999; cursor: grabbing; }
         li.drag-over { border-top: 2px solid #d97757; }
 
-        /* --- 修复点：恢复点击事件，只禁止文字选择 --- */
         .account-info {
             flex-grow: 1;
             overflow: hidden;
             margin-right: 5px;
-            cursor: pointer;       /* 鼠标放上去变小手 */
-            user-select: none;     /* 禁止选中文字（防止拖拽时变蓝） */
-            pointer-events: auto;  /* 关键修复：确保能接收点击 */
+
+            /* --- 修复点 3: 保持一致，确保点击有效 --- */
+            cursor: pointer;
+            user-select: none;
+            pointer-events: auto;
         }
 
         .account-name { font-weight: 600; font-size: 14px; display: block; }
