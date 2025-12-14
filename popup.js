@@ -4,75 +4,104 @@ const COOKIE_NAME = "sessionKey";
 const COOKIE_DOMAIN = ".claude.ai";
 
 // 状态变量
-let editingIndex = -1;  // 当前正在编辑的索引
-let dragStartIndex = -1; // 拖拽起始索引
+let editingIndex = -1;
+let dragStartIndex = -1;
+let currentIP = ""; // 存储当前 IP 用于跳转查询
 
 document.addEventListener('DOMContentLoaded', async () => {
     refreshList();
+    checkNetworkInfo(); // 启动检测
 
-    // 基础操作绑定
     document.getElementById('addBtn').addEventListener('click', handleSaveOrUpdate);
     document.getElementById('grabBtn').addEventListener('click', autoGrabKey);
     document.getElementById('clearBtn').addEventListener('click', resetFormAndLogout);
-
-    // 搜索绑定
     document.getElementById('searchBox').addEventListener('input', filterAccounts);
 
-    // 导入导出绑定
+    // IP 区域点击刷新
+    document.getElementById('ipCard').addEventListener('click', (e) => {
+        // 如果点的是安全体检按钮，不触发刷新
+        if(e.target.closest('#safetyBtn')) return;
+
+        document.getElementById('ipText').textContent = "刷新中...";
+        checkNetworkInfo();
+    });
+
+    // 安全体检跳转
+    document.getElementById('safetyBtn').addEventListener('click', () => {
+        if(currentIP) {
+            // 跳转到专业的 IP 欺诈查询网站
+            chrome.tabs.create({ url: `https://scamalytics.com/ip/${currentIP}` });
+        } else {
+            alert("请等待 IP 检测完成");
+        }
+    });
+
     document.getElementById('exportBtn').addEventListener('click', exportData);
     document.getElementById('importBtn').addEventListener('click', () => document.getElementById('fileInput').click());
     document.getElementById('fileInput').addEventListener('change', handleImportFile);
 });
 
-/* ================== 核心功能：增删改查 ================== */
+/* ================== 新增：网络信息检测 (Geo + ISP) ================== */
+async function checkNetworkInfo() {
+    try {
+        // 使用 ipwho.is (免费, 无需 Key, 支持 HTTPS, 含 Geo 和 ISP)
+        const response = await fetch('https://ipwho.is/');
+        const data = await response.json();
+
+        if (data.success) {
+            currentIP = data.ip;
+            document.getElementById('ipText').textContent = data.ip;
+
+            // 显示地理位置: 城市, 国家代码 (如: Los Angeles, US)
+            document.getElementById('geoText').textContent = `${data.city}, ${data.country_code}`;
+
+            // 显示运营商 (ISP)
+            document.getElementById('ispText').textContent = data.connection.isp || data.connection.org || "未知ISP";
+
+            // 简单的视觉提示：如果 IP 和当前时区不符，或者看起来正常，改变颜色
+            document.getElementById('geoText').style.color = '#d97757';
+        } else {
+            throw new Error("API Limit");
+        }
+    } catch (e) {
+        console.error(e);
+        document.getElementById('ipText').textContent = "检测失败";
+        document.getElementById('geoText').textContent = "网络错误";
+    }
+}
+
+/* ================== 核心功能 ================== */
 
 async function handleSaveOrUpdate() {
     const nameInput = document.getElementById('accName');
     const keyInput = document.getElementById('accKey');
     const name = nameInput.value.trim();
     const key = keyInput.value.trim();
-
-    if (!name || !key) {
-        alert("请填写完整信息");
-        return;
-    }
-
+    if (!name || !key) { alert("请填写完整信息"); return; }
     const { accounts = [] } = await chrome.storage.local.get('accounts');
-
     if (editingIndex >= 0) {
-        // --- 更新模式 ---
         accounts[editingIndex] = { name, key };
         editingIndex = -1;
     } else {
-        // --- 新增模式 ---
-        if (accounts.some(a => a.key === key)) {
-            alert("这个 Key 已经存在了");
-            return;
-        }
+        if (accounts.some(a => a.key === key)) { alert("Key 已存在"); return; }
         accounts.push({ name, key });
     }
-
     await chrome.storage.local.set({ accounts });
     resetFormUI();
     refreshList();
 }
 
-/* ================== 列表渲染、搜索与拖拽 ================== */
-
 async function refreshList() {
     const { accounts = [] } = await chrome.storage.local.get('accounts');
     const listEl = document.getElementById('accountList');
     listEl.innerHTML = '';
-
-    // 获取当前 Cookie 用于高亮
     const currentCookie = await chrome.cookies.get({ url: CLAUDE_URL, name: COOKIE_NAME });
     const currentVal = currentCookie ? decodeURIComponent(currentCookie.value) : "";
 
     accounts.forEach((acc, index) => {
         const li = document.createElement('li');
-        li.setAttribute('draggable', true); // 开启拖拽
-        li.dataset.index = index; // 存储真实索引
-
+        li.setAttribute('draggable', true);
+        li.dataset.index = index;
         if (currentVal === acc.key) li.classList.add('active');
 
         li.innerHTML = `
@@ -90,25 +119,10 @@ async function refreshList() {
             </div>
         `;
 
-        // 绑定拖拽事件
         addDragEvents(li, index);
-
-        // 点击切换
-        li.querySelector('.account-info').addEventListener('click', (e) => switchAccount(acc.key));
-
-        // 复制
-        li.querySelector('.copy-btn').addEventListener('click', (e) => {
-            e.stopPropagation();
-            handleCopy(acc.key, e.target);
-        });
-
-        // 编辑
-        li.querySelector('.edit-btn').addEventListener('click', (e) => {
-            e.stopPropagation();
-            startEdit(index, acc.name, acc.key);
-        });
-
-        // 删除
+        li.querySelector('.account-info').addEventListener('click', () => switchAccount(acc.key));
+        li.querySelector('.copy-btn').addEventListener('click', (e) => { e.stopPropagation(); handleCopy(acc.key, e.target); });
+        li.querySelector('.edit-btn').addEventListener('click', (e) => { e.stopPropagation(); startEdit(index, acc.name, acc.key); });
         li.querySelector('.del-btn').addEventListener('click', async (e) => {
             e.stopPropagation();
             if(confirm(`确定删除 ${acc.name} 吗？`)) {
@@ -118,59 +132,30 @@ async function refreshList() {
                 refreshList();
             }
         });
-
         listEl.appendChild(li);
     });
 
-    // 如果搜索框里有字，重新触发一次过滤，防止列表刷新后搜索失效
     const searchVal = document.getElementById('searchBox').value;
-    if (searchVal) {
-        // 手动触发 input 事件逻辑
-        const event = { target: document.getElementById('searchBox') };
-        filterAccounts(event);
-    }
+    if (searchVal) { const event = { target: document.getElementById('searchBox') }; filterAccounts(event); }
 }
 
-// 搜索过滤逻辑
 function filterAccounts(e) {
     const term = e.target.value.toLowerCase();
     const listItems = document.querySelectorAll('#accountList li');
-
     listItems.forEach(li => {
-        // 修改点：只获取 name-text 类的文本，忽略 current-badge
-        // 加上 ?. 也就是可选链，防止有时候元素还没渲染出来报错
         const nameEl = li.querySelector('.name-text');
         const name = nameEl ? nameEl.textContent.toLowerCase() : "";
-
-        // 进阶优化：如果想同时也支持搜 Key，可以写成：
-        // const key = li.querySelector('.account-key').textContent.toLowerCase();
-        // if (name.includes(term) || key.includes(term)) { ... }
-
-        if (name.includes(term)) {
-            li.style.display = 'flex';
-        } else {
-            li.style.display = 'none';
-        }
+        li.style.display = name.includes(term) ? 'flex' : 'none';
     });
 }
 
-// 拖拽逻辑
 function addDragEvents(li, index) {
-    li.addEventListener('dragstart', () => {
-        dragStartIndex = index;
-        li.classList.add('dragging');
-    });
-    li.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        li.classList.add('drag-over');
-    });
-    li.addEventListener('dragleave', () => {
-        li.classList.remove('drag-over');
-    });
+    li.addEventListener('dragstart', () => { dragStartIndex = index; li.classList.add('dragging'); });
+    li.addEventListener('dragover', (e) => { e.preventDefault(); li.classList.add('drag-over'); });
+    li.addEventListener('dragleave', () => { li.classList.remove('drag-over'); });
     li.addEventListener('drop', async () => {
         li.classList.remove('drag-over');
-        const dragEndIndex = index;
-        swapItems(dragStartIndex, dragEndIndex);
+        swapItems(dragStartIndex, index);
     });
     li.addEventListener('dragend', () => {
         li.classList.remove('dragging');
@@ -187,15 +172,9 @@ async function swapItems(fromIndex, toIndex) {
     refreshList();
 }
 
-/* ================== 导入导出 (JSON/TXT) ================== */
-
 async function exportData() {
     const { accounts = [] } = await chrome.storage.local.get('accounts');
-    if (accounts.length === 0) {
-        alert("列表为空，无法导出");
-        return;
-    }
-    // 使用 JSON 格式导出
+    if (accounts.length === 0) { alert("无数据"); return; }
     const content = JSON.stringify(accounts, null, 2);
     const blob = new Blob([content], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -209,38 +188,20 @@ async function exportData() {
 async function handleImportFile(event) {
     const file = event.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = async (e) => {
         const text = e.target.result;
         let newAccounts = [];
-
-        try {
-            // 优先尝试 JSON
-            newAccounts = JSON.parse(text);
-            if (!Array.isArray(newAccounts)) throw new Error("Not Array");
-        } catch (err) {
-            // 失败则尝试 TXT 解析 (兼容旧版)
-            console.log("JSON parse failed, trying TXT...");
-            const lines = text.split('\n');
-            lines.forEach(line => {
+        try { newAccounts = JSON.parse(text); }
+        catch (err) {
+            text.split('\n').forEach(line => {
                 line = line.trim();
                 if (!line || line.startsWith("Format:")) return;
-                let parts = [];
-                if (line.includes('|')) parts = line.split('|');
-                else if (line.includes(',')) {
-                    const idx = line.indexOf(',');
-                    parts = [line.slice(0, idx), line.slice(idx + 1)];
-                }
+                let parts = line.includes('|') ? line.split('|') : line.split(',');
                 if (parts.length >= 2) newAccounts.push({ name: parts[0].trim(), key: parts[1].trim() });
             });
         }
-
-        if (newAccounts.length === 0) {
-            alert("文件格式无法识别或内容为空");
-            return;
-        }
-
+        if (newAccounts.length === 0) { alert("无效文件"); return; }
         const { accounts = [] } = await chrome.storage.local.get('accounts');
         let count = 0;
         newAccounts.forEach(nw => {
@@ -249,23 +210,20 @@ async function handleImportFile(event) {
                 count++;
             }
         });
-
         await chrome.storage.local.set({ accounts });
-        alert(`成功导入 ${count} 个新账号`);
+        alert(`导入 ${count} 个`);
         refreshList();
         event.target.value = '';
     };
     reader.readAsText(file);
 }
 
-/* ================== 辅助函数：复制、编辑、获取、切换 ================== */
-
 function startEdit(index, name, key) {
     editingIndex = index;
     document.getElementById('accName').value = name;
     document.getElementById('accKey').value = key;
     const addBtn = document.getElementById('addBtn');
-    addBtn.textContent = "🔄 更新账号";
+    addBtn.textContent = "🔄 更新";
     addBtn.classList.add('updating');
     document.getElementById('accName').focus();
 }
@@ -303,9 +261,7 @@ async function autoGrabKey() {
         if (cookie) {
             document.getElementById('accKey').value = decodeURIComponent(cookie.value);
             document.getElementById('accName').focus();
-        } else {
-            alert("未检测到登录状态");
-        }
+        } else { alert("未登录"); }
     } catch (e) {}
 }
 
