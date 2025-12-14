@@ -9,24 +9,26 @@ A lightweight, efficient Chrome Extension designed to manage and switch between 
 ## ✨ Features
 
 * **⚡ One-Click Switching**: Instantly switch accounts without manually logging out and logging back in.
+* **🌍 Network Monitor**: **[NEW]** Real-time display of your current **IP Address**, **Geolocation**, and **ISP**. Essential for verifying VPN/Proxy status.
+* **🛡️ Security Check**: Built-in shortcut to analyze your IP's fraud score (Risk Score) via external security services.
 * **📥 Auto-Capture Session**: Automatically grabs the `sessionKey` from your current active tab—no need to dig into DevTools.
-* **🖱️ Drag & Drop Sorting**: Organize your account list order simply by dragging items.
-* **🔍 Real-time Search**: Quickly filter through your saved accounts with the built-in search bar.
+* **🖱️ Drag & Drop Sorting**: Organize your account list order simply by dragging items (Optimized for smooth UX).
+* **🔍 Real-time Search**: Quickly filter through your saved accounts by name with the built-in search bar.
 * **💾 Import & Export**: Backup your accounts to a JSON file or import them to another device.
 * **🧹 Safe Logout**: Clears the local session cookies to return to the login screen without destroying the server-side session.
-* **🔒 Local Storage**: All sensitive data (Session Keys) is stored locally in your browser (`chrome.storage.local`). Nothing is sent to any external server.
+* **🔒 Local Storage**: All sensitive data (Session Keys) is stored locally in your browser (`chrome.storage.local`).
 
 ## 🛠️ Tech Stack
 
 * **Core**: HTML5, CSS3, JavaScript (ES6+)
 * **Framework**: Chrome Extension Manifest V3
-* **APIs**:
+* **APIs & Services**:
     * `chrome.cookies`: For session management.
     * `chrome.storage`: For persisting account data.
     * `HTML5 Drag and Drop API`: For list sorting.
+    * `ipwho.is`: For fetching IP and Geolocation data (HTTPS, No-Key).
 
 ## 📸 Preview
-
 
 <img src="./preview.png" width="250" alt="App Screenshot">
 
@@ -50,11 +52,14 @@ Since this extension handles sensitive session keys, it is designed to be instal
 * **Method A (Auto)**: Log in to Claude.ai, open the extension, and click the **📥 button** next to the input box. It will auto-fill the current session key. Give it a name and click **Save**.
 * **Method B (Manual)**: Manually paste a `sessionKey` (starting with `sk-ant...`) and a name, then click **Save**.
 
-### 2. Switching Accounts
-* Simply click on the **Name** of any saved account in the list. The page will reload automatically with the new session active.
+### 2. Monitoring Network
+* The **IP Card** below the search bar shows your current network status.
+* Click the **🛡️ Safety Check** button to open a detailed fraud report for your current IP (powered by Scamalytics).
+* Click the IP text area to refresh the data manually.
 
 ### 3. Managing List
 * **Sort**: Click and hold any account item to drag and reorder it.
+* **Search**: Type in the search box to filter accounts by name.
 * **Edit**: Click the **✏️ (Pencil)** icon to modify the name or key.
 * **Copy**: Click the **📋 (Clipboard)** icon to copy the key.
 * **Delete**: Click the **🗑️ (Trash)** icon to remove an account.
@@ -65,8 +70,9 @@ Since this extension handles sensitive session keys, it is designed to be instal
 
 ## ⚠️ Security Note
 
-* **Your Data is Yours**: This extension runs entirely client-side. Your session keys are stored in your browser's local storage and are **never** transmitted to any third-party server.
-* **Best Practice**: Do not use this extension on public or shared computers, as anyone with access to the browser can potentially switch to your accounts.
+* **Data Privacy**: Your session keys are stored **exclusively** in your browser's local storage and are never transmitted to any server.
+* **Network Check**: The extension makes a read-only request to `ipwho.is` to display your IP/Geo information. No personal data or session keys are sent with this request.
+* **Best Practice**: Do not use this extension on public or shared computers.
 
 ## 📄 License
 
