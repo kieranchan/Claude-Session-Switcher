@@ -9,6 +9,7 @@ A lightweight, efficient Chrome Extension designed to manage and switch between 
 ## ✨ Features
 
 * **⚡ One-Click Switching**: Instantly switch accounts without manually logging out and logging back in.
+* **⏳ Smart Limit Detector**: **[NEW]** Automatically detects Claude's message limit warnings (e.g., "until 5 PM") and marks the account with a cooling-down timer.
 * **🌍 Network Monitor**: **[NEW]** Real-time display of your current **IP Address**, **Geolocation**, and **ISP**. Essential for verifying VPN/Proxy status.
 * **🛡️ Security Check**: Built-in shortcut to analyze your IP's fraud score (Risk Score) via external security services.
 * **📥 Auto-Capture Session**: Automatically grabs the `sessionKey` from your current active tab—no need to dig into DevTools.
@@ -67,6 +68,11 @@ Since this extension handles sensitive session keys, it is designed to be instal
 ### 4. Backup / Restore
 * Use the **📤 Export Backup** button at the bottom to download a `.json` file containing your saved accounts.
 * Use **📥 Import Backup** to restore accounts from a file.
+
+### 5. Limit Management
+* **Auto-Detection**: When Claude displays a limit message (e.g., "You are out of messages until 5 PM"), the extension automatically detects it and marks the current account as "Limited" with a countdown timer.
+* **Manual Mark**: Click the **⏳ (Hourglass)** icon on any account to manually set a cooling-down duration (in hours).
+* **Visual Indicator**: Limited accounts appear red with a `CD: Xh Ym` badge in the list.
 
 ## ⚠️ Security Note
 
