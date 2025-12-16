@@ -13,6 +13,12 @@
     "default_title": "Switch Claude Account",
     "default_icon": "icon.png"
   },
+  "content_scripts": [
+    {
+      "matches": ["https://claude.ai/*"],
+      "js": ["content.js"]
+    }
+  ],
   "permissions": [
     "cookies",
     "storage",

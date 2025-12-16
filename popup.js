@@ -53,6 +53,9 @@ async function switchAccount(key) {
             expirationDate: (Date.now() / 1000) + (86400 * 30)
         });
 
+        // 保存当前活跃的 key，供 content script 使用
+        await chrome.storage.local.set({ lastActiveKey: key });
+
         // 3. 处理页面跳转 + 聚焦 (NEW!)
         const tabs = await chrome.tabs.query({ url: "*://claude.ai/*" });
         if (tabs.length > 0) {
@@ -96,10 +99,26 @@ async function refreshList(optionalActiveKey = null) {
         currentVal = currentCookie ? decodeURIComponent(currentCookie.value) : "";
     }
 
+    const now = Date.now();
+    const fragment = document.createDocumentFragment();
+
     accounts.forEach((acc, index) => {
         const li = document.createElement('li');
         li.setAttribute('draggable', true);
         li.dataset.index = index;
+        li.dataset.key = acc.key;
+        li.dataset.name = acc.name;
+
+        // Check limit
+        const isLimited = acc.availableAt && acc.availableAt > now;
+        let limitText = "";
+        if (isLimited) {
+            const diff = acc.availableAt - now;
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const mins = Math.ceil((diff % (1000 * 60 * 60)) / (1000 * 60));
+            limitText = `CD: ${hours}h ${mins}m`;
+            li.classList.add('limited');
+        }
 
         if (currentVal === acc.key) li.classList.add('active');
 
@@ -108,31 +127,59 @@ async function refreshList(optionalActiveKey = null) {
                 <span class="account-name">
                     <span class="name-text">${acc.name}</span> 
                     <span class="current-badge">Current</span>
+                    <span class="limit-badge">${limitText}</span>
                 </span>
                 <span class="account-key">Key: ${acc.key.substring(0, 10)}...${acc.key.substring(acc.key.length - 6)}</span>
             </div>
             <div class="action-group">
+                <button class="icon-btn limit-btn" title="标记限制">⏳</button>
                 <button class="icon-btn copy-btn" title="复制 Key">📋</button>
                 <button class="icon-btn edit-btn" title="修改">✏️</button>
                 <button class="icon-btn del-btn" title="删除">🗑️</button>
             </div>
         `;
-
+        
+        // Drag events still need individual attachment or careful delegation (native drag is tricky with delegation)
+        // Keeping drag events here for stability as they are specific to the row
         addDragEvents(li, index);
-        li.querySelector('.account-info').addEventListener('click', () => switchAccount(acc.key));
-        li.querySelector('.copy-btn').addEventListener('click', (e) => { e.stopPropagation(); handleCopy(acc.key, e.target); });
-        li.querySelector('.edit-btn').addEventListener('click', (e) => { e.stopPropagation(); startEdit(index, acc.name, acc.key); });
-        li.querySelector('.del-btn').addEventListener('click', async (e) => {
-            e.stopPropagation();
-            if(confirm(`确定删除 ${acc.name} 吗？`)) {
-                accounts.splice(index, 1);
-                await chrome.storage.local.set({ accounts });
-                if (editingIndex === index) resetFormUI();
-                refreshList();
+        
+        fragment.appendChild(li);
+    });
+    
+    listEl.appendChild(fragment);
+
+    // Ensure we don't add multiple delegation listeners if refreshList is called multiple times
+    if (!listEl.hasAttribute('data-listening')) {
+        listEl.setAttribute('data-listening', 'true');
+        listEl.addEventListener('click', async (e) => {
+            const li = e.target.closest('li');
+            if (!li) return;
+            
+            const index = parseInt(li.dataset.index);
+            const key = li.dataset.key;
+            const name = li.dataset.name;
+            const { accounts } = await chrome.storage.local.get('accounts');
+
+            // Handle Buttons
+            if (e.target.closest('.limit-btn')) {
+                handleSetLimit(index);
+            } else if (e.target.closest('.copy-btn')) {
+                handleCopy(key, e.target.closest('.copy-btn'));
+            } else if (e.target.closest('.edit-btn')) {
+                startEdit(index, name, key);
+            } else if (e.target.closest('.del-btn')) {
+                if(confirm(`确定删除 ${name} 吗？`)) {
+                    accounts.splice(index, 1);
+                    await chrome.storage.local.set({ accounts });
+                    if (editingIndex === index) resetFormUI();
+                    refreshList();
+                }
+            } else if (e.target.closest('.account-info')) {
+                // Main click area (Switch Account)
+                switchAccount(key);
             }
         });
-        listEl.appendChild(li);
-    });
+    }
 
     const searchVal = document.getElementById('searchBox').value;
     if (searchVal) {
@@ -170,7 +217,9 @@ async function handleSaveOrUpdate() {
     if (!name || !key) { alert("请填写完整信息"); return; }
     const { accounts = [] } = await chrome.storage.local.get('accounts');
     if (editingIndex >= 0) {
-        accounts[editingIndex] = { name, key };
+        // 保留原有的 limit 信息
+        const oldAcc = accounts[editingIndex];
+        accounts[editingIndex] = { ...oldAcc, name, key };
         editingIndex = -1;
     } else {
         if (accounts.some(a => a.key === key)) { alert("Key 已存在"); return; }
@@ -305,4 +354,27 @@ async function autoGrabKey() {
             document.getElementById('accName').focus();
         } else { alert("未登录"); }
     } catch (e) {}
+}
+
+/* ================== 新增：限制管理 ================== */
+
+async function handleSetLimit(index) {
+    const { accounts = [] } = await chrome.storage.local.get('accounts');
+    // Prompt 用户输入小时数
+    const input = prompt("该账号需要冷却多久？(单位：小时)\n输入 0 或留空则清除限制\n例如: 5 或 2.5", "4");
+    
+    if (input === null) return; // 用户取消
+
+    const hours = parseFloat(input);
+    
+    if (!input || isNaN(hours) || hours <= 0) {
+        // 清除限制
+        delete accounts[index].availableAt;
+    } else {
+        // 设置限制时间戳
+        accounts[index].availableAt = Date.now() + (hours * 60 * 60 * 1000);
+    }
+
+    await chrome.storage.local.set({ accounts });
+    refreshList();
 }
