@@ -9,7 +9,8 @@ const CONSTANTS = {
     COOKIE_DOMAIN: ".claude.ai",
     STORAGE_KEY: "accounts",
     LAST_ACTIVE_KEY: "lastActiveKey",
-    NET_CACHE_KEY: "cachedNetwork"
+    NET_CACHE_KEY: "cachedNetwork",
+    THEME_KEY: "user_theme"
 };
 
 // --- Icons (SVG Strings) ---
@@ -17,7 +18,9 @@ const ICONS = {
     copy: `<svg class="svg-icon" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`,
     edit: `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`,
     trash: `<svg class="svg-icon" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`,
-    clock: `<svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`
+    clock: `<svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
+    sun: `<svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`,
+    moon: `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`
 };
 
 const App = {
@@ -26,7 +29,8 @@ const App = {
         editingIndex: -1,
         dragStartIndex: -1,
         currentIP: null,
-        filterTerm: ""
+        filterTerm: "",
+        isDark: false
     },
 
     init: async () => {
@@ -37,6 +41,13 @@ const App = {
             errDiv.textContent = `Error: ${e.message} at ${e.filename}:${e.lineno}`;
             document.body.prepend(errDiv);
         });
+        
+        // Theme Init
+        const { [CONSTANTS.THEME_KEY]: savedTheme } = await chrome.storage.local.get(CONSTANTS.THEME_KEY);
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        App.state.isDark = savedTheme === 'dark' || (!savedTheme && systemDark);
+        
+        App.UI.applyTheme(App.state.isDark);
 
         await App.Storage.load();
         App.UI.initListeners();
@@ -46,6 +57,12 @@ const App = {
 
     // --- Logic & Actions ---
     Actions: {
+        toggleTheme: async () => {
+            App.state.isDark = !App.state.isDark;
+            App.UI.applyTheme(App.state.isDark);
+            await chrome.storage.local.set({ [CONSTANTS.THEME_KEY]: App.state.isDark ? 'dark' : 'light' });
+        },
+
         addOrUpdateAccount: async (name, key) => {
             if (!name || !key) return App.UI.showToast("请填写完整信息");
             
@@ -248,9 +265,22 @@ const App = {
     UI: {
         els: {}, // Cache elements
 
+        applyTheme: (isDark) => {
+            if (isDark) {
+                document.body.classList.add('dark-mode');
+                document.getElementById('themeBtn').innerHTML = ICONS.sun; // Show sun icon to switch to light
+            } else {
+                document.body.classList.remove('dark-mode');
+                document.getElementById('themeBtn').innerHTML = ICONS.moon; // Show moon icon to switch to dark
+            }
+        },
+
         initListeners: () => {
             const $ = (id) => document.getElementById(id);
             
+            // Theme Toggle
+            $('themeBtn').onclick = () => App.Actions.toggleTheme();
+
             // Toggle Tools Menu (Moved to top)
             const toolsBtn = $('toolsToggle');
             if (toolsBtn) {
@@ -298,6 +328,40 @@ const App = {
                     App.UI.render();
                 }
             };
+
+            // Event Delegation for Account List (Optimization)
+            $('accountList').addEventListener('click', (e) => {
+                const li = e.target.closest('li.account-card');
+                if (!li) return;
+                
+                const index = parseInt(li.dataset.index);
+                const acc = App.state.accounts[index];
+                if (!acc) return; // Safety
+
+                // 1. Handle Actions Buttons
+                if (e.target.closest('.action-limit')) {
+                    e.stopPropagation();
+                    App.Actions.setLimit(index);
+                } else if (e.target.closest('.action-copy')) {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(acc.key); 
+                    App.UI.showToast("已复制");
+                } else if (e.target.closest('.action-edit')) {
+                    e.stopPropagation();
+                    App.state.editingIndex = index;
+                    document.getElementById('inputName').value = acc.name;
+                    document.getElementById('inputKey').value = acc.key;
+                    document.getElementById('modalTitle').textContent = "编辑账号";
+                    App.UI.toggleEditForm(true);
+                } else if (e.target.closest('.action-delete')) {
+                    e.stopPropagation();
+                    App.Actions.deleteAccount(index);
+                } else {
+                    // 2. Handle Main Card Click (Switch Account)
+                    // If not clicking a button, we switch
+                    App.Actions.switchAccount(acc.key);
+                }
+            });
         },
 
         toggleEditForm: (show = null) => {
@@ -359,6 +423,7 @@ const App = {
             filtered.forEach(acc => {
                 const li = document.createElement('li');
                 li.className = 'account-card';
+                li.dataset.index = acc.originalIndex; // Important for delegation
                 if (acc.key === activeKey) li.classList.add('active');
                 
                 const safeName = acc.name || "未命名";
@@ -388,27 +453,6 @@ const App = {
                         <button class="icon-btn action-delete delete" title="删除">${ICONS.trash}</button>
                     </div>
                 `;
-
-                // Events
-                li.querySelector('.account-info').onclick = () => App.Actions.switchAccount(acc.key);
-                li.querySelector('.action-limit').onclick = (e) => { e.stopPropagation(); App.Actions.setLimit(acc.originalIndex); };
-                li.querySelector('.action-copy').onclick = (e) => { 
-                    e.stopPropagation(); 
-                    navigator.clipboard.writeText(acc.key); 
-                    App.UI.showToast("已复制"); 
-                };
-                li.querySelector('.action-edit').onclick = (e) => {
-                    e.stopPropagation();
-                    App.state.editingIndex = acc.originalIndex;
-                    document.getElementById('inputName').value = acc.name;
-                    document.getElementById('inputKey').value = acc.key;
-                    document.getElementById('modalTitle').textContent = "编辑账号";
-                    App.UI.toggleEditForm(true);
-                };
-                li.querySelector('.action-delete').onclick = (e) => {
-                    e.stopPropagation();
-                    App.Actions.deleteAccount(acc.originalIndex);
-                };
 
                 // Drag & Drop
                 li.setAttribute('draggable', true);

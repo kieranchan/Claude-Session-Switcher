@@ -10,8 +10,32 @@
     --success-color: #2ecc71;
     --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
-    --shadow-md: 0 4px 6px rgba(0,0,0,0.05);
+    --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+    --input-bg: #ffffff;
 }
+
+/* Dark Mode (Triggered by class) */
+body.dark-mode {
+    --primary-color: #e08e73;
+    --primary-hover: #d97757;
+    --bg-color: #202124;
+    --card-bg: #292a2d;
+    --text-main: #e8eaed;
+    --text-sub: #9aa0a6;
+    --border-color: #3c4043;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 6px rgba(0,0,0,0.4);
+    --input-bg: #1f1f1f;
+}
+
+/* Dark Mode Specific Overrides */
+body.dark-mode .status-bar { background: var(--card-bg) !important; border-top-color: var(--border-color) !important; }
+body.dark-mode .tools-dropdown { background: var(--card-bg) !important; }
+body.dark-mode .tools-item:hover { background: #3c4043 !important; }
+body.dark-mode .account-card:hover { background-color: #35363a !important; border-color: #5f6368 !important; }
+body.dark-mode .account-card.active { background-color: #1e2822 !important; border-color: var(--success-color) !important; }
+body.dark-mode .icon-btn:hover { background-color: #3c4043 !important; color: var(--primary-color); }
+body.dark-mode input { background-color: var(--input-bg) !important; color: var(--text-main) !important; }
 
 body {
     width: 350px;

@@ -4,7 +4,7 @@
 const LIMIT_REGEX = /until\s+(\d{1,2}(?::\d{2})?\s*(?:AM|PM))/i;
 
 let lastTextLength = 0;
-const CHECK_INTERVAL = 2000; // Check every 2 seconds
+const CHECK_INTERVAL = 5000; // Check every 5 seconds
 
 // Use Polling instead of MutationObserver to save CPU during text streaming
 setInterval(() => {
