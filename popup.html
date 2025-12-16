@@ -2,116 +2,85 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Claude Switcher</title>
+    <title>Claude Account Switcher</title>
+    <link rel="stylesheet" href="popup.css">
+    <!-- Inline SVG Defs for reuse -->
     <style>
-        body { width: 340px; padding: 15px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9f9f9; display: flex; flex-direction: column; height: 100%; min-height: 500px;}
-        h3 { margin-top: 0; color: #333; border-bottom: 2px solid #d97757; padding-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
-
-        .input-group { background: white; padding: 12px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        input { width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; outline: none; transition: border 0.3s; }
-        input:focus { border-color: #d97757; }
-
-        button { border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-weight: 600; transition: all 0.2s; font-size: 13px;}
-        button:hover { opacity: 0.9; }
-
-        #grabBtn { background: #666; color: white; width: 40px; margin-bottom: 8px; }
-        #addBtn { background-color: #d97757; color: white; flex: 2; padding: 8px; }
-        #addBtn.updating { background-color: #2980b9; }
-        #clearBtn { background-color: #eee; color: #333; flex: 1; border: 1px solid #ddd; padding: 8px; }
-
-        #searchBox { margin-top: 10px; border-radius: 20px; text-align: center; background: #f1f1f1; font-size: 12px; border: 1px solid #eee; padding: 5px;}
-
-        /* --- 新增：IP 详细信息卡片 --- */
-        .ip-card {
-            background: #fff;
-            border: 1px solid #eee;
-            border-radius: 6px;
-            margin-top: 8px;
-            padding: 8px;
-            font-size: 11px;
-            color: #555;
-        }
-        .ip-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-        .ip-row:last-child { margin-bottom: 0; }
-        .ip-val { font-weight: bold; color: #333; cursor: pointer;}
-        .ip-geo { color: #d97757; }
-
-        /* 安全检查按钮 */
-        .check-btn {
-            background: none; border: 1px solid #ddd; padding: 1px 6px; font-size: 10px; border-radius: 10px; color: #666;
-            text-decoration: none; display: inline-block; cursor: pointer;
-        }
-        .check-btn:hover { background: #d97757; color: white; border-color: #d97757; }
-
-        ul { list-style: none; padding: 0; margin-top: 5px; flex-grow: 1; overflow-y: auto; max-height: 260px; }
-
-        li {
-            background: white; border-bottom: 1px solid #eee; padding: 10px;
-            display: flex; align-items: center; justify-content: space-between;
-            transition: background 0.2s; cursor: pointer;
-        }
-        li:active { cursor: grabbing; background-color: #f0f0f0; }
-        li:hover { background-color: #fff0eb; }
-        li.active { border-left: 3px solid #2ecc71; }
-        li.limited { background-color: #fff0f0; border-left: 3px solid #e74c3c; opacity: 0.9; }
-        li.dragging { opacity: 0.5; background: #e0e0e0; border: 2px dashed #999; cursor: grabbing; }
-        li.drag-over { border-top: 2px solid #d97757; }
-
-        .account-info { flex-grow: 1; overflow: hidden; margin-right: 5px; cursor: pointer; user-select: none; pointer-events: auto; }
-        .account-name { font-weight: 600; font-size: 14px; display: block; }
-        .account-key { font-size: 11px; color: #999; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-        .current-badge { font-size: 10px; background: #2ecc71; color: white; padding: 1px 5px; border-radius: 4px; margin-left: 5px; display: none; vertical-align: middle;}
-        .limit-badge { font-size: 10px; background: #e74c3c; color: white; padding: 1px 5px; border-radius: 4px; margin-left: 5px; display: none; vertical-align: middle;}
-        li.active .current-badge { display: inline-block; }
-        li.limited .limit-badge { display: inline-block; }
-
-        .action-group { display: flex; gap: 4px; }
-        .icon-btn { padding: 4px 6px; background: #f0f0f0; color: #555; font-size: 14px; border-radius: 4px; }
-        .icon-btn:hover { background: #e0e0e0; color: #000; }
-        .del-btn:hover { background: #ffebeb; color: red; }
-
-        .footer-tools { margin-top: auto; display: flex; justify-content: space-between; gap: 10px; padding-top: 10px; border-top: 1px solid #eee; }
-        .footer-btn { flex: 1; background: #fff; border: 1px solid #ccc; color: #555; font-size: 12px; }
-        .footer-btn:hover { background: #f5f5f5; border-color: #aaa; }
+        .svg-icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     </style>
 </head>
 <body>
 
-<h3>Claude 助手</h3>
-
-<div class="input-group">
-    <input type="text" id="accName" placeholder="账号备注 (如: Work)" />
-    <div style="display: flex; gap: 5px;">
-        <input type="password" id="accKey" placeholder="SessionKey" />
-        <button id="grabBtn" title="一键获取当前登录的Key">📥</button>
+<header>
+    <div class="brand">
+        <img src="assets/icon.png" width="20" height="20" alt="Logo">
+        <span>Claude Switcher</span>
     </div>
-    <div style="display: flex; gap: 5px;">
-        <button id="addBtn">💾 保存账号</button>
-        <button id="clearBtn" title="退出会话 / 取消编辑">🧹 重置</button>
+    <div class="header-actions" style="position: relative;">
+        <!-- Settings / Tools Toggle -->
+        <button id="toolsToggle" title="工具">
+            <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
+        </button>
+        <!-- Tools Dropdown (Moved to Header) -->
+        <div class="tools-dropdown" id="toolsMenu">
+            <button class="tools-item" id="exportBtn">📤 导出配置</button>
+            <button class="tools-item" id="importBtn">📥 导入配置</button>
+            <div style="height:1px; background:#eee; margin:4px 0;"></div>
+            <button class="tools-item" id="clearAllBtn" style="color: red;">⚠️ 清空数据</button>
+        </div>
+    </div>
+</header>
+
+<main>
+    <div class="toolbar">
+        <div class="search-container">
+            <span class="search-icon">
+                <svg class="svg-icon" style="width:14px;height:14px;" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            </span>
+            <input type="text" id="searchBox" class="search-input" placeholder="搜索账号...">
+        </div>
+        <button id="toggleAddBtn" class="add-btn-main" title="添加新账号">+</button>
+    </div>
+
+    <div id="modalOverlay" class="modal-overlay"></div>
+
+    <div id="editForm" class="modal-form">
+        <h3 id="modalTitle" style="margin:0 0 10px 0; font-size:14px;">添加账号</h3>
+        <div class="form-row">
+            <input type="text" id="inputName" class="form-input" placeholder="账号备注 (如: Work)" autocomplete="off">
+        </div>
+        <div class="form-row">
+            <input type="text" id="inputKey" class="form-input" placeholder="sk-ant-..." autocomplete="off">
+            <button id="grabBtn" class="btn btn-grab" title="自动获取网页 Key">
+                <svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            </button>
+        </div>
+        <div class="form-actions">
+            <button id="cancelEditBtn" class="btn btn-secondary">取消</button>
+            <button id="saveBtn" class="btn btn-primary">保存</button>
+        </div>
+    </div>
+
+    <ul id="accountList">
+        <!-- List items injected by JS -->
+    </ul>
+</main>
+
+<div class="status-bar">
+    <div class="net-info" id="netInfo" title="点击刷新 IP">
+        <div class="net-badge">
+            <div class="status-dot" id="netDot"></div>
+            <span id="ipText">检测中...</span>
+        </div>
+        <button id="ipCheckBtn" class="icon-btn" title="去网站查看详情" style="margin-left: 5px; padding: 2px;">
+            <svg class="svg-icon" style="width:12px;height:12px;" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+        </button>
+        <span id="geoText" style="color: #999; margin-left: 5px;">-</span>
     </div>
 </div>
 
-<input type="text" id="searchBox" placeholder="🔍 搜索已保存的账号..." />
-
-<div class="ip-card" id="ipCard" title="点击刷新网络信息">
-    <div class="ip-row">
-        <span>📡 IP: <span id="ipText" class="ip-val">检测中...</span></span>
-        <span id="safetyBtn" class="check-btn" title="查看此 IP 欺诈分数">🛡️ 安全体检</span>
-    </div>
-    <div class="ip-row">
-        <span>📍 <span id="geoText">...</span></span>
-        <span id="ispText" style="max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">...</span>
-    </div>
-</div>
-
-<ul id="accountList"></ul>
-<input type="file" id="fileInput" accept=".json,.txt" style="display: none;" />
-
-<div class="footer-tools">
-    <button id="exportBtn" class="footer-btn">📤 导出备份</button>
-    <button id="importBtn" class="footer-btn">📥 导入备份</button>
-</div>
+<input type="file" id="fileInput" accept=".json,.txt" style="display: none;">
+<div id="toast" class="toast"></div>
 
 <script src="popup.js"></script>
 </body>
