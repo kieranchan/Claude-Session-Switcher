@@ -16,9 +16,9 @@
         <img src="assets/icon.png" width="20" height="20" alt="Logo">
         <span>Claude Switcher</span>
     </div>
-    <div class="header-actions" style="position: relative;">
+    <div class="header-actions">
         <!-- Theme Toggle -->
-        <button id="themeBtn" title="切换主题" style="margin-right: 4px;">
+        <button id="themeBtn" title="切换主题">
             <svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
         </button>
         <!-- Settings / Tools Toggle -->
@@ -49,7 +49,7 @@
     <div id="modalOverlay" class="modal-overlay"></div>
 
     <div id="editForm" class="modal-form">
-        <h3 id="modalTitle" style="margin:0 0 10px 0; font-size:14px;">添加账号</h3>
+        <h3 id="modalTitle">添加账号</h3>
         <div class="form-row">
             <input type="text" id="inputName" class="form-input" placeholder="账号备注 (如: Work)" autocomplete="off">
         </div>
@@ -76,7 +76,7 @@
             <div class="status-dot" id="netDot"></div>
             <span id="ipText">检测中...</span>
         </div>
-        <button id="ipCheckBtn" class="icon-btn" title="去网站查看详情" style="margin-left: 5px; padding: 2px;">
+        <button id="ipCheckBtn" class="icon-btn" title="去网站查看详情">
             <svg class="svg-icon" style="width:12px;height:12px;" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
         </button>
         <span id="geoText" style="color: #999; margin-left: 5px;">-</span>

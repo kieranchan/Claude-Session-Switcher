@@ -93,6 +93,11 @@ header {
     color: var(--primary-color);
 }
 
+.header-actions { position: relative; }
+#themeBtn { margin-right: 4px; }
+#modalTitle { margin: 0 0 10px 0; font-size: 14px; }
+#ipCheckBtn { margin-left: 5px; padding: 2px; }
+
 /* Main Content */
 main {
     flex: 1;
