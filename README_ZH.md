@@ -39,7 +39,7 @@
 
 ## 📸 预览
 
-*(请在此处添加截图)*
+<img src="assets/preview.png" width="300" alt="Preview">
 
 ## 📦 安装指南
 

@@ -39,7 +39,7 @@ A lightweight, efficient Chrome Extension designed to manage and switch between 
 
 ## 📸 Preview
 
-*(Add your screenshot here)*
+<img src="assets/preview.png" width="300" alt="Preview">
 
 ## 📦 Installation
 
