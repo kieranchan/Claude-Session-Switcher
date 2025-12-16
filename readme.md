@@ -11,6 +11,7 @@ A lightweight, efficient Chrome Extension designed to manage and switch between 
 ## ✨ Features
 
 * **⚡ One-Click Switching**: Instantly switch accounts without manually logging out and logging back in.
+* **🚪 Quick Login**: Shortcut to clear session and return to login page for easy account switching.
 * **🎨 Modern UI**: Clean, card-based design with SVG icons and a responsive layout.
 * **📥 Smart Auto-Capture**: 
     * Automatically grabs the `sessionKey` from your current active tab.
@@ -58,6 +59,7 @@ Since this extension handles sensitive session keys, it is designed to be instal
 
 ### 1. Adding an Account
 1.  Click the **+** button in the top right.
+    > **Tip**: Click the **Door/Login Icon** in the header to quickly log out current session and jump to the login page.
 2.  **Auto Method**: Log in to Claude.ai, open the modal, and click the **📥 button**. It will fill the Key AND your Username.
 3.  **Manual Method**: Paste your `sk-ant...` key into the input (visible as text) and give it a name.
 4.  Click **Save**.

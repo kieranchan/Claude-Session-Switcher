@@ -13,7 +13,8 @@ const ICONS = {
     trash: `<svg class="svg-icon" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`,
     clock: `<svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
     sun: `<svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`,
-    moon: `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`
+    moon: `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`,
+    login: `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>`
 };
 
 const $ = id => document.getElementById(id);
@@ -37,6 +38,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('cancelEditBtn').onclick = $('modalOverlay').onclick = () => toggleModal(false);
     $('saveBtn').onclick = saveAccount;
     $('grabBtn').onclick = grabKey;
+    $('loginLinkBtn').onclick = logoutAndLogin;
     $('themeBtn').onclick = toggleTheme;
     $('toolsToggle').onclick = (e) => { e.stopPropagation(); $('toolsMenu').classList.toggle('show'); };
     document.onclick = () => $('toolsMenu').classList.remove('show');
@@ -115,6 +117,18 @@ async function switchAccount(key) {
         chrome.tabs.create({ url: "https://claude.ai/chats" });
     }
     render();
+}
+
+async function logoutAndLogin() {
+    await chrome.cookies.remove({ url: CLAUDE_URL, name: COOKIE_NAME });
+    
+    const [tab] = await chrome.tabs.query({ url: "*://claude.ai/*" });
+    if (tab) {
+        await chrome.tabs.update(tab.id, { url: "https://claude.ai/login", active: true });
+        chrome.windows.update(tab.windowId, { focused: true });
+    } else {
+        chrome.tabs.create({ url: "https://claude.ai/login" });
+    }
 }
 
 // --- UI & Helpers ---
