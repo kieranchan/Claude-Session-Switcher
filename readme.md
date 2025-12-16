@@ -31,7 +31,7 @@ A lightweight, efficient Chrome Extension designed to manage and switch between 
 
 ## 📸 Preview
 
-<img src="./preview.png" width="250" alt="App Screenshot">
+<img src="./assets/preview.png" width="250" alt="App Screenshot">
 
 ## 📦 Installation
 

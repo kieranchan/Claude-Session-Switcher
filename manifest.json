@@ -4,14 +4,14 @@
   "version": "1.3.0",
   "description": "多账号 Claude sessionKey 快速切换工具",
   "icons": {
-    "16": "icon.png",
-    "48": "icon.png",
-    "128": "icon.png"
+    "16": "assets/icon.png",
+    "48": "assets/icon.png",
+    "128": "assets/icon.png"
   },
   "action": {
     "default_popup": "popup.html",
     "default_title": "Switch Claude Account",
-    "default_icon": "icon.png"
+    "default_icon": "assets/icon.png"
   },
   "content_scripts": [
     {

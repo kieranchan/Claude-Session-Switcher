@@ -24,8 +24,8 @@ Key functionalities include:
 *   **`manifest.json`**: The entry point configuration. Defines permissions (`cookies`, `storage`), host permissions (`claude.ai`), and the popup action.
 *   **`popup.html`**: The main interface. Contains the DOM structure and inline CSS styles for the popup window.
 *   **`popup.js`**: Contains all application logic. Handles DOM events, storage I/O, and cookie manipulation.
-*   **`icon.png`**: Extension icon.
-*   **`preview.png`**: Screenshot used in the README.
+*   **`content.js`**: Content script injected into `claude.ai` to detect limit messages.
+*   **`assets/`**: Contains static resources like `icon.png` and `preview.png`.
 
 ## Installation & Running
 This extension is intended to be "side-loaded" (installed locally).

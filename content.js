@@ -17,16 +17,19 @@ setInterval(() => {
 
 async function checkLimitMessage() {
     try {
-        const bodyText = document.body.innerText;
+        // Optimization: Use textContent instead of innerText to avoid forcing a Layout Reflow (Jank).
+        // innerText triggers style calculations; textContent is raw DOM data and much faster.
+        const fullText = document.body.textContent;
         
-        // Simple optimization: If text is too short or hasn't changed much (heuristic)
-        // But for "limits", it's critical, so we just run the fast regex.
-        // The Regex is simple enough to run on the whole body string every 2s without lag.
-        
-        // Quick exit if keyword not found
-        if (bodyText.indexOf("until") === -1) return;
+        // Optimization: Only scan the last 5000 characters. 
+        // Limit messages (toasts/alerts) are usually appended at the end of the DOM or are new UI elements.
+        // We don't need to regex scan a 100k token chat history.
+        const textSlice = fullText.slice(-5000);
 
-        const match = bodyText.match(LIMIT_REGEX);
+        // Quick exit if keyword not found in the slice
+        if (textSlice.indexOf("until") === -1) return;
+
+        const match = textSlice.match(LIMIT_REGEX);
         if (match) {
             const timeStr = match[1]; 
             await markAccountLimited(timeStr);

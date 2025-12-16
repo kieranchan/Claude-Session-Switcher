@@ -187,20 +187,45 @@ async function refreshList(optionalActiveKey = null) {
 /* ================== 网络检测 ================== */
 
 async function checkNetworkInfo() {
+    // 1. 优先尝试从缓存加载 (提升感知速度)
+    try {
+        const { cachedNetwork } = await chrome.storage.local.get('cachedNetwork');
+        if (cachedNetwork) {
+            updateNetworkUI(cachedNetwork);
+        }
+    } catch (e) {}
+
+    // 2. 发起实时请求
     try {
         const response = await fetch('https://ipwho.is/');
         const data = await response.json();
         if (data.success) {
             currentIP = data.ip;
-            document.getElementById('ipText').textContent = data.ip;
-            document.getElementById('geoText').textContent = `${data.city}, ${data.country_code}`;
-            document.getElementById('ispText').textContent = data.connection.isp || data.connection.org || "未知ISP";
-            document.getElementById('geoText').style.color = '#d97757';
+            const netInfo = {
+                ip: data.ip,
+                geo: `${data.city}, ${data.country_code}`,
+                isp: data.connection.isp || data.connection.org || "未知ISP"
+            };
+            
+            // 更新 UI 并 写入缓存
+            updateNetworkUI(netInfo);
+            chrome.storage.local.set({ cachedNetwork: netInfo });
         } else { throw new Error("API Limit"); }
     } catch (e) {
-        document.getElementById('ipText').textContent = "检测失败";
-        document.getElementById('geoText').textContent = "网络错误";
+        // 只有当没有任何数据展示时，才显示错误
+        if (!document.getElementById('ipText').textContent.includes('.')) {
+            document.getElementById('ipText').textContent = "检测失败";
+            document.getElementById('geoText').textContent = "网络错误";
+        }
     }
+}
+
+function updateNetworkUI(info) {
+    currentIP = info.ip;
+    document.getElementById('ipText').textContent = info.ip;
+    document.getElementById('geoText').textContent = info.geo;
+    document.getElementById('ispText').textContent = info.isp;
+    document.getElementById('geoText').style.color = '#d97757';
 }
 
 /* ================== 其他辅助函数 ================== */
