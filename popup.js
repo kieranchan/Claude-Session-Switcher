@@ -38,11 +38,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function switchAccount(key) {
     if (!key) return;
     try {
-        // 1. 先清除旧 Cookie
-        await chrome.cookies.remove({ url: CLAUDE_URL, name: COOKIE_NAME });
-
-        // 2. 设置新 Cookie
-        await chrome.cookies.set({
+        // 并行执行：设置 Cookie、更新存储、查询标签页
+        // chrome.cookies.set 会自动覆盖旧 Cookie，无需先 remove
+        const cookiePromise = chrome.cookies.set({
             url: CLAUDE_URL,
             name: COOKIE_NAME,
             value: key,
@@ -53,25 +51,23 @@ async function switchAccount(key) {
             expirationDate: (Date.now() / 1000) + (86400 * 30)
         });
 
-        // 保存当前活跃的 key，供 content script 使用
-        await chrome.storage.local.set({ lastActiveKey: key });
+        const storagePromise = chrome.storage.local.set({ lastActiveKey: key });
+        const tabsPromise = chrome.tabs.query({ url: "*://claude.ai/*" });
 
-        // 3. 处理页面跳转 + 聚焦 (NEW!)
-        const tabs = await chrome.tabs.query({ url: "*://claude.ai/*" });
+        // 等待所有操作完成
+        const [_, __, tabs] = await Promise.all([cookiePromise, storagePromise, tabsPromise]);
+
+        // 3. 处理页面跳转 + 聚焦
         if (tabs.length > 0) {
             const tabId = tabs[0].id;
             const windowId = tabs[0].windowId;
 
-            // A. 更新 URL 并设置为 "active: true" (这会让标签页跳到最前)
-            await chrome.tabs.update(tabId, {
-                url: "https://claude.ai/chats",
-                active: true
-            });
-
-            // B. 确保该标签页所在的窗口也是最顶层的 (防止窗口在后面)
-            await chrome.windows.update(windowId, { focused: true });
+            // 并行执行：跳转页面 和 聚焦窗口
+            await Promise.all([
+                chrome.tabs.update(tabId, { url: "https://claude.ai/chats", active: true }),
+                chrome.windows.update(windowId, { focused: true })
+            ]);
         } else {
-            // C. 没找到就新建 (新建默认就是 active 的)
             await chrome.tabs.create({ url: "https://claude.ai/chats" });
         }
 
