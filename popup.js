@@ -1,5 +1,7 @@
 /**
- * Claude Account Switcher - Optimized
+ * Claude Account Switcher - Optimized with Algorithms
+ * 1. Debounce applied to Search (Performance)
+ * 2. Hash Map (Set) applied to Key Lookups (O(1) Complexity)
  */
 const CLAUDE_URL = "https://claude.ai";
 const COOKIE_NAME = "sessionKey";
@@ -19,6 +21,9 @@ const ICONS = {
 
 const $ = id => document.getElementById(id);
 let accounts = [];
+// Optimization: Hash Map (Set) for O(1) duplicate key checks
+const accountKeySet = new Set();
+
 let editingIndex = -1;
 let dragSourceIndex = -1;
 let isDark = false;
@@ -28,6 +33,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load Data
     const data = await chrome.storage.local.get([STORAGE_KEY, THEME_KEY]);
     accounts = data[STORAGE_KEY] || [];
+    
+    // Optimization: Initialize Set
+    accounts.forEach(acc => accountKeySet.add(acc.key));
     
     // Theme Init
     isDark = data[THEME_KEY] === 'dark' || (!data[THEME_KEY] && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -43,7 +51,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('toolsToggle').onclick = (e) => { e.stopPropagation(); $('toolsMenu').classList.toggle('show'); };
     document.onclick = () => $('toolsMenu').classList.remove('show');
     
-    $('searchBox').oninput = render;
+    // Optimization: Debounce search input (300ms)
+    $('searchBox').oninput = debounce(render, 300);
+    
     $('exportBtn').onclick = exportData;
     $('importBtn').onclick = () => $('fileInput').click();
     $('fileInput').onchange = importData;
@@ -69,11 +79,29 @@ async function saveAccount() {
     if (key.startsWith('"') && key.endsWith('"')) key = key.slice(1, -1);
 
     if (editingIndex >= 0) {
+        // Edit Mode
+        const oldKey = accounts[editingIndex].key;
+        
+        // If key changed, check for collision
+        if (key !== oldKey && accountKeySet.has(key)) {
+            return showToast("Key 已存在");
+        }
+
+        // Update Set: Remove old, Add new
+        if (key !== oldKey) {
+            accountKeySet.delete(oldKey);
+            accountKeySet.add(key);
+        }
+
         accounts[editingIndex] = { ...accounts[editingIndex], name, key };
         showToast("已更新");
     } else {
-        if (accounts.some(a => a.key === key)) return showToast("Key 已存在");
+        // Add Mode
+        // Optimization: O(1) Lookup
+        if (accountKeySet.has(key)) return showToast("Key 已存在");
+        
         accounts.push({ name, key });
+        accountKeySet.add(key);
         showToast("已保存");
     }
     await chrome.storage.local.set({ [STORAGE_KEY]: accounts });
@@ -88,15 +116,34 @@ async function grabKey() {
         
         $('inputKey').value = decodeURIComponent(cookie.value);
         
-        // Extract Username from DOM
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab?.id) {
-            const res = await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                func: () => document.querySelector('span.w-full.text-start.block.truncate')?.textContent.trim()
-            });
-            if (res?.[0]?.result) $('inputName').value = res[0].result;
+        // 1. Try DOM (Best for exact UI name)
+        let foundName = null;
+        const tabs = await chrome.tabs.query({ url: "https://claude.ai/*" });
+        if (tabs.length > 0) {
+            try {
+                const res = await chrome.scripting.executeScript({
+                    target: { tabId: tabs[0].id },
+                    func: () => document.querySelector('span.w-full.text-start.block.truncate')?.textContent.trim()
+                });
+                if (res?.[0]?.result) foundName = res[0].result;
+            } catch (e) { console.log("DOM grab failed", e); }
         }
+
+        // 2. Fallback: API (If tab closed)
+        if (!foundName) {
+            try {
+                const res = await fetch("https://claude.ai/api/organizations", {
+                    method: "GET",
+                    headers: { "Content-Type": "application/json" }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data?.[0]?.name) foundName = data[0].name;
+                }
+            } catch (e) { console.log("API grab failed", e); }
+        }
+
+        if (foundName) $('inputName').value = foundName;
         $('inputName').focus();
     } catch { showToast("获取失败"); }
 }
@@ -224,6 +271,8 @@ function handleListClick(e) {
         toggleModal(true);
     } else if (e.target.closest('.action-delete')) {
         if(confirm("确定删除?")) {
+            // Optimization: Remove from Set
+            accountKeySet.delete(acc.key);
             accounts.splice(idx, 1);
             chrome.storage.local.set({ [STORAGE_KEY]: accounts }).then(render);
         }
@@ -233,6 +282,15 @@ function handleListClick(e) {
 }
 
 // --- Utils ---
+// Optimization: Debounce Function
+function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), wait);
+    };
+}
 
 async function checkNetwork() {
     try {
@@ -277,9 +335,23 @@ function importData(e) {
         try {
             const json = JSON.parse(ev.target.result);
             if(Array.isArray(json)) {
-                json.forEach(a => { if(!accounts.some(x=>x.key===a.key)) accounts.push(a); });
-                await chrome.storage.local.set({ [STORAGE_KEY]: accounts });
-                render(); showToast(`导入成功`);
+                let addedCount = 0;
+                json.forEach(a => {
+                    // Optimization: O(1) Check
+                    if(!accountKeySet.has(a.key)) {
+                        accounts.push(a);
+                        accountKeySet.add(a.key);
+                        addedCount++;
+                    }
+                });
+                
+                if (addedCount > 0) {
+                    await chrome.storage.local.set({ [STORAGE_KEY]: accounts });
+                    render(); 
+                    showToast(`导入 ${addedCount} 个账号`);
+                } else {
+                    showToast("没有新账号");
+                }
             }
         } catch { showToast("格式错误"); }
     };
@@ -289,6 +361,7 @@ function importData(e) {
 function clearData() {
     if(confirm("清空不可恢复!")) {
         accounts = [];
+        accountKeySet.clear(); // Optimization: Clear Set
         chrome.storage.local.set({ [STORAGE_KEY]: [] }).then(render);
     }
 }

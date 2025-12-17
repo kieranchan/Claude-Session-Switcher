@@ -2,7 +2,7 @@
 
 **[🇺🇸 English](README.md) | [🇨🇳 中文文档](README_ZH.md)**
 
-A lightweight, efficient Chrome Extension designed to manage and switch between multiple [Claude.ai](https://claude.ai) accounts seamlessly. Built with **Manifest V3**, **Modern UI**, and vanilla JavaScript.
+A lightweight, efficient Chrome Extension designed to manage and switch between multiple [Claude.ai](https://claude.ai) accounts seamlessly. Built with **Manifest V3**, **Modern UI**, and optimized vanilla JavaScript for high performance.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Manifest](https://img.shields.io/badge/Manifest-V3-green)
@@ -11,32 +11,38 @@ A lightweight, efficient Chrome Extension designed to manage and switch between 
 ## ✨ Features
 
 * **⚡ One-Click Switching**: Instantly switch accounts without manually logging out and logging back in.
-* **🚪 Quick Login**: Shortcut to clear session and return to login page for easy account switching.
-* **🎨 Modern UI**: Clean, card-based design with SVG icons and a responsive layout.
+* **🚀 Extreme Performance**:
+    * **Debounced Search**: Smooth filtering experience even with large lists.
+    * **O(1) Lookups**: Instant duplicate checks using Hash Maps.
+    * **Zero Idle CPU**: Event-driven architecture ensures 0% CPU usage when not in use.
+* **🚪 Quick Login**: Shortcut to clear session and return to login page.
+* **🎨 Modern UI**: Clean, card-based design with SVG icons, **Dark Mode** support, and responsive layout.
 * **📥 Smart Auto-Capture**: 
     * Automatically grabs the `sessionKey` from your current active tab.
-    * **[NEW]** Intelligent username extraction: Automatically finds and fills your username directly from the Claude sidebar.
+    * **Username Extraction**: Automatically finds and fills your username directly from the Claude sidebar.
 * **⏳ Limit Tracker**: 
-    * **Auto-Detect**: Background detection of Claude's "message limit" warnings.
+    * **High-Perf Detection**: Uses `TreeWalker` and `MutationObserver` algorithms to precisely detect "limit reached" messages with minimal resource usage.
     * **Manual Timer**: Set custom cooldown timers for accounts.
 * **🌍 Network Monitor**: 
     * Compact status bar showing **IP** and **Location**.
     * **One-Click Check**: Dedicated button to analyze IP risk score via external services.
 * **✏️ Modal Editing**: Add or edit accounts in a focused, non-intrusive modal overlay.
 * **🖱️ Drag & Drop Sorting**: Organize your account list order simply by dragging items.
-* **💾 Import & Export**: Backup your accounts to JSON/CSV or import them to another device.
+* **💾 Import & Export**: Backup your accounts to JSON.
 * **🔒 Secure & Local**: 
     * Keys are stored in `chrome.storage.local`.
     * No remote servers.
-    * **Plaintext Verification**: Key input shows as text to ensure you know exactly what you are saving.
 
 ## 🛠️ Tech Stack
 
 * **Core**: HTML5, CSS3 (Variables & Flexbox), JavaScript (ES6+).
 * **Architecture**: 
-    * Namespace-based JS (`App.UI`, `App.Storage`, etc.).
-    * CSS Variables for theming.
-* **APIs**: `chrome.cookies`, `chrome.storage`, `chrome.scripting`, `chrome.activeTab`.
+    * **Manifest V3**: Compliant with the latest Chrome security standards.
+    * **High Performance**: No heavy frameworks, just pure, optimized code.
+* **Algorithms**:
+    * **TreeWalker**: For efficient DOM traversal.
+    * **Debounce**: For input optimization.
+    * **Hash Map**: For fast data retrieval.
 
 ## 📸 Preview
 
@@ -58,10 +64,9 @@ Since this extension handles sensitive session keys, it is designed to be instal
 ## 📖 Usage Guide
 
 ### 1. Adding an Account
-1.  Click the **+** button in the top right.
-    > **Tip**: Click the **Door/Login Icon** in the header to quickly log out current session and jump to the login page.
-2.  **Auto Method**: Log in to Claude.ai, open the modal, and click the **📥 button**. It will fill the Key AND your Username.
-3.  **Manual Method**: Paste your `sk-ant...` key into the input (visible as text) and give it a name.
+1.  Click the **+** button.
+2.  **Auto Method**: Log in to Claude.ai, open the modal, and click the **📥 button**.
+3.  **Manual Method**: Paste your `sk-ant...` key into the input.
 4.  Click **Save**.
 
 ### 2. Switching Accounts
@@ -70,21 +75,14 @@ Since this extension handles sensitive session keys, it is designed to be instal
 
 ### 3. Network & Security
 * **Check IP**: Look at the bottom status bar.
-* **Security Report**: Click the **🔗 (Link)** icon next to the IP to view a fraud report.
-* **Refresh**: Click the IP text itself to re-fetch network info.
-
-### 4. Backup & Tools
-* Click the **...** (Menu) button in the top-right header.
-* **Export**: Save your accounts to a file.
-* **Import**: Load accounts from a file.
-* **Clear Data**: Wipe all local data.
+* **Security Report**: Click the **🔗** icon to view a fraud report.
 
 ## ⚠️ Security Note
 
 * **Local Only**: Your data never leaves your browser.
 * **Permissions**: 
     * `cookies`: To switch accounts.
-    * `scripting`: To read your username from the page (Auto-fill feature).
+    * `scripting`: To read your username from the page.
     * `storage`: To save your list.
 
 ## 📄 License
