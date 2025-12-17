@@ -1,7 +1,5 @@
 /**
- * Claude Account Switcher - Optimized with Algorithms
- * 1. Debounce applied to Search (Performance)
- * 2. Hash Map (Set) applied to Key Lookups (O(1) Complexity)
+ * Claude Account Switcher - Refactored with State Management and Components
  */
 const CLAUDE_URL = "https://claude.ai";
 const COOKIE_NAME = "sessionKey";
@@ -22,92 +20,214 @@ const ICONS = {
 };
 
 const $ = id => document.getElementById(id);
-let accounts = [];
-// Optimization: Hash Map (Set) for O(1) duplicate key checks
-const accountKeySet = new Set();
 
-let dragSourceIndex = -1;
-let isDark = false;
-let currentIP = null;
+// --- State Management (Store) ---
+function createStore(initialState = {}) {
+    let state = initialState;
+    const listeners = new Set();
 
-document.addEventListener('DOMContentLoaded', async () => {
-    // Load Data
-    const data = await chrome.storage.local.get([STORAGE_KEY, THEME_KEY]);
-    accounts = data[STORAGE_KEY] || [];
+    const setState = (updater) => {
+        const newState = typeof updater === 'function' ? updater(state) : updater;
+        state = { ...state, ...newState };
+        publish();
+    };
+
+    const subscribe = (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+    };
+
+    const publish = () => {
+        for (const listener of listeners) {
+            listener(state);
+        }
+    };
+
+    return {
+        getState: () => state,
+        setState,
+        subscribe,
+    };
+}
+
+// --- Components ---
+function AccountCard(account, index, store) {
+    const li = document.createElement('li');
+    li.className = 'account-card';
+    li.draggable = true;
+    li.dataset.index = index;
+
+    const update = (newAccount) => {
+        account = newAccount;
+        const { activeKey } = store.getState();
+        li.classList.toggle('active', account.key === activeKey);
+
+        let badges = account.key === activeKey ? `<span class="badge badge-current">Current</span>` : '';
+        const now = Date.now();
+        if (account.availableAt && account.availableAt > now) {
+            const min = Math.ceil((account.availableAt - now) / 60000);
+            badges += `<span class="badge badge-limit">⏳ ${min > 60 ? Math.floor(min/60)+'h' : min+'m'}</span>`;
+        }
+        
+        const nameEl = li.querySelector('.account-name');
+        if(nameEl) nameEl.textContent = account.name || '未命名';
+        
+        const nameInputEl = li.querySelector('.account-name-input');
+        if(nameInputEl) nameInputEl.value = account.name || '未命名';
+        
+        const badgesEl = li.querySelector('.badges');
+        if(badgesEl) badgesEl.innerHTML = badges;
+    };
+
+    li.innerHTML = `
+        <div class="account-info">
+            <div class="account-header">
+                <span class="account-name"></span>
+                <input type="text" class="account-name-input" style="display:none;" />
+                <div class="badges"></div>
+            </div>
+            <div class="account-key">${account.key.slice(0,10)}...${account.key.slice(-6)}</div>
+        </div>
+        <div class="account-actions">
+            <button class="icon-btn action-limit" title="Set Cooldown">${ICONS.clock}</button>
+            <button class="icon-btn action-copy" title="Copy Key">${ICONS.copy}</button>
+            <button class="icon-btn action-grab" title="Grab Username">${ICONS.grab}</button>
+            <button class="icon-btn action-edit" title="Edit Name">${ICONS.edit}</button>
+            <button class="icon-btn action-save" title="Save Name" style="display:none;">${ICONS.save}</button>
+            <button class="icon-btn action-delete delete" title="Delete Account">${ICONS.trash}</button>
+        </div>`;
+
+    update(account);
+
+    li.addEventListener('click', (e) => {
+        if (e.target.closest('.account-actions')) return;
+        switchAccount(account.key);
+    });
+
+    return { element: li, update };
+}
+
+function App(store) {
+    const listEl = $('accountList');
+    let components = [];
+
+    const render = (state) => {
+        listEl.innerHTML = '';
+        const { accounts, filter } = state;
+        
+        const filteredAccounts = accounts.filter(acc => !filter || acc.name.toLowerCase().includes(filter.toLowerCase()));
+
+        if (filteredAccounts.length === 0) {
+            listEl.innerHTML = `<div class="empty-state">📭 无账号</div>`;
+            return;
+        }
+
+        components = filteredAccounts.map((acc, idx) => {
+            const originalIndex = accounts.indexOf(acc);
+            const card = AccountCard(acc, originalIndex, store);
+            listEl.appendChild(card.element);
+            return card;
+        });
+    };
     
-    // Optimization: Initialize Set
-    accounts.forEach(acc => accountKeySet.add(acc.key));
+    store.subscribe(render);
+    render(store.getState());
+}
+
+// --- Main ---
+document.addEventListener('DOMContentLoaded', async () => {
+    const data = await chrome.storage.local.get([STORAGE_KEY, THEME_KEY]);
+    const accounts = data[STORAGE_KEY] || [];
+    const accountKeySet = new Set(accounts.map(acc => acc.key));
+
+    const store = createStore({
+        accounts,
+        accountKeySet,
+        activeKey: await getActiveKey(),
+        filter: '',
+    });
+
+    window.store = store; // For easier debugging
+    
+    App(store);
+    initEventListeners(store);
     
     // Theme Init
-    isDark = data[THEME_KEY] === 'dark' || (!data[THEME_KEY] && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    applyTheme();
-
-    // Event Listeners
-    $('toggleAddBtn').onclick = () => toggleModal(true);
-    $('cancelEditBtn').onclick = $('modalOverlay').onclick = () => toggleModal(false);
-    $('saveBtn').onclick = saveAccount;
-    $('grabBtn').onclick = grabKey;
-    $('loginLinkBtn').onclick = logoutAndLogin;
-    $('themeBtn').onclick = toggleTheme;
-    $('toolsToggle').onclick = (e) => { e.stopPropagation(); $('toolsMenu').classList.toggle('show'); };
-    document.onclick = () => $('toolsMenu').classList.remove('show');
+    const isDark = data[THEME_KEY] === 'dark' || (!data[THEME_KEY] && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    applyTheme(isDark);
     
-    // Optimization: Debounce search input (300ms)
-    $('searchBox').oninput = debounce(render, 300);
-    
-    $('exportBtn').onclick = exportData;
-    $('importBtn').onclick = () => $('fileInput').click();
-    $('fileInput').onchange = importData;
-    $('clearAllBtn').onclick = clearData;
-    
-    $('netInfo').onclick = checkNetwork;
-    $('ipCheckBtn').onclick = (e) => { e.stopPropagation(); if(currentIP) chrome.tabs.create({url: `https://scamalytics.com/ip/${currentIP}`}); };
-
-    // Delegation for List Actions
-    $('accountList').addEventListener('click', handleListClick);
-    
-    // Initial Render
-    render();
     checkNetwork();
 });
 
-// --- Core Logic ---
+function initEventListeners(store) {
+    $('toggleAddBtn').onclick = () => toggleModal(true);
+    $('cancelEditBtn').onclick = $('modalOverlay').onclick = () => toggleModal(false);
+    $('saveBtn').onclick = () => saveAccount(store);
+    $('grabBtn').onclick = () => grabKey();
+    $('loginLinkBtn').onclick = logoutAndLogin;
+    
+    $('themeBtn').onclick = () => {
+        const newIsDark = !document.body.classList.contains('dark-mode');
+        applyTheme(newIsDark);
+        chrome.storage.local.set({ [THEME_KEY]: newIsDark ? 'dark' : 'light' });
+    };
 
-async function saveAccount() {
+    $('toolsToggle').onclick = (e) => { e.stopPropagation(); $('toolsMenu').classList.toggle('show'); };
+    document.onclick = () => $('toolsMenu').classList.remove('show');
+    
+    $('searchBox').oninput = debounce((e) => store.setState({ filter: e.target.value }), 300);
+    
+    $('exportBtn').onclick = () => exportData(store.getState().accounts);
+    $('importBtn').onclick = () => $('fileInput').click();
+    $('fileInput').onchange = (e) => importData(e, store);
+    $('clearAllBtn').onclick = () => clearData(store);
+    
+    $('netInfo').onclick = checkNetwork;
+    $('ipCheckBtn').onclick = (e) => { 
+        e.stopPropagation();
+        const { currentIP } = store.getState();
+        if(currentIP) chrome.tabs.create({url: `https://scamalytics.com/ip/${currentIP}`}); 
+    };
+
+    $('accountList').addEventListener('click', (e) => handleListClick(e, store));
+    
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.classList.contains('account-name-input')) {
+            e.target.closest('li').querySelector('.action-save').click();
+        }
+    });
+}
+
+// --- Actions ---
+
+async function saveAccount(store) {
     const name = $('inputName').value.trim();
     let key = $('inputKey').value.trim();
     if (!name || !key) return showToast("请填写完整");
     if (key.startsWith('"') && key.endsWith('"')) key = key.slice(1, -1);
 
-    // Add Mode
-    // Optimization: O(1) Lookup
+    const { accounts, accountKeySet } = store.getState();
     if (accountKeySet.has(key)) return showToast("Key 已存在");
-    
+
     const newAccount = { name, key };
-    accounts.push(newAccount);
-    accountKeySet.add(key);
+    const newAccounts = [...accounts, newAccount];
+    
+    await chrome.storage.local.set({ [STORAGE_KEY]: newAccounts });
+    store.setState({ 
+        accounts: newAccounts,
+        accountKeySet: new Set(accountKeySet).add(key)
+    });
+
     showToast("已保存");
-    
-    await chrome.storage.local.set({ [STORAGE_KEY]: accounts });
-    
-    const list = $('accountList');
-    if (list.querySelector('.empty-state')) {
-        list.innerHTML = '';
-    }
-    const listItem = createAccountListItem(newAccount, accounts.length - 1);
-    list.appendChild(listItem);
-    
     toggleModal(false);
 }
 
-async function grabKey(index = -1) {
+async function grabKey(store, index = -1) {
     try {
         const cookie = await chrome.cookies.get({ url: CLAUDE_URL, name: COOKIE_NAME });
         if (!cookie) return showToast("未登录");
-        
         const key = decodeURIComponent(cookie.value);
         
-        // 1. Try DOM (Best for exact UI name)
         let foundName = null;
         const tabs = await chrome.tabs.query({ url: "https://claude.ai/*" });
         if (tabs.length > 0) {
@@ -120,7 +240,6 @@ async function grabKey(index = -1) {
             } catch (e) { console.log("DOM grab failed", e); }
         }
 
-        // 2. Fallback: API (If tab closed)
         if (!foundName) {
             try {
                 const res = await fetch("https://claude.ai/api/organizations", {
@@ -136,23 +255,19 @@ async function grabKey(index = -1) {
 
         if (index >= 0) {
             if (foundName) {
-                accounts[index].name = foundName;
-                await chrome.storage.local.set({ [STORAGE_KEY]: accounts });
-                
-                const listItem = $(`accountList`).querySelector(`[data-index="${index}"]`);
-                if (listItem) {
-                    listItem.querySelector('.account-name').textContent = foundName;
-                }
-                
+                const { accounts } = store.getState();
+                const newAccounts = [...accounts];
+                newAccounts[index].name = foundName;
+
+                await chrome.storage.local.set({ [STORAGE_KEY]: newAccounts });
+                store.setState({ accounts: newAccounts });
                 showToast("用户名已更新");
             } else {
                 showToast("未能获取用户名");
             }
         } else {
             $('inputKey').value = key;
-            if (foundName) {
-                $('inputName').value = foundName;
-            }
+            if (foundName) $('inputName').value = foundName;
             $('inputName').focus();
         }
     } catch { showToast("获取失败"); }
@@ -160,36 +275,15 @@ async function grabKey(index = -1) {
 
 async function switchAccount(key) {
     if (!key) return;
-    const oldActiveKey = getActiveKey();
-
+    
     await chrome.cookies.set({
         url: CLAUDE_URL, name: COOKIE_NAME, value: key, domain: ".claude.ai",
         path: "/", secure: true, sameSite: "lax", expirationDate: (Date.now()/1000) + (86400*30)
     });
     await chrome.storage.local.set({ lastActiveKey: key });
 
-    const list = $('accountList');
-    const allItems = list.querySelectorAll('.account-card');
-
-    allItems.forEach(item => {
-        const itemIndex = parseInt(item.dataset.index, 10);
-        const itemAcc = accounts[itemIndex];
-        
-        if (itemAcc.key === oldActiveKey) {
-            item.classList.remove('active');
-            const currentBadge = item.querySelector('.badge-current');
-            if (currentBadge) currentBadge.remove();
-        }
-        if (itemAcc.key === key) {
-            item.classList.add('active');
-            const badgesContainer = item.querySelector('.badges');
-            const newBadge = document.createElement('span');
-            newBadge.className = 'badge badge-current';
-            newBadge.textContent = 'Current';
-            badgesContainer.prepend(newBadge);
-        }
-    });
-
+    window.store.setState({ activeKey: key });
+    
     const [tab] = await chrome.tabs.query({ url: "*://claude.ai/*" });
     if (tab) {
         await chrome.tabs.update(tab.id, { url: "https://claude.ai/chats", active: true });
@@ -201,13 +295,105 @@ async function switchAccount(key) {
 
 async function logoutAndLogin() {
     await chrome.cookies.remove({ url: CLAUDE_URL, name: COOKIE_NAME });
-    
     const [tab] = await chrome.tabs.query({ url: "*://claude.ai/*" });
     if (tab) {
         await chrome.tabs.update(tab.id, { url: "https://claude.ai/login", active: true });
         chrome.windows.update(tab.windowId, { focused: true });
     } else {
         chrome.tabs.create({ url: "https://claude.ai/login" });
+    }
+}
+
+function handleListClick(e, store) {
+    const li = e.target.closest('li');
+    if (!li) return;
+    const idx = parseInt(li.dataset.index);
+    const { accounts } = store.getState();
+    const acc = accounts[idx];
+
+    const target = e.target.closest('.icon-btn');
+    if (!target) return;
+
+    if (target.classList.contains('action-limit')) {
+        const h = parseFloat(prompt("冷却时间(小时), 0清除:", "4"));
+        if (!isNaN(h)) {
+            const newAccounts = [...accounts];
+            if (h <= 0) delete newAccounts[idx].availableAt;
+            else newAccounts[idx].availableAt = Date.now() + (h * 3600000);
+            
+            chrome.storage.local.set({ [STORAGE_KEY]: newAccounts }).then(() => {
+                store.setState({ accounts: newAccounts });
+            });
+        }
+    } else if (target.classList.contains('action-copy')) {
+        navigator.clipboard.writeText(acc.key);
+        showToast("已复制");
+    } else if (target.classList.contains('action-grab')) {
+        grabKey(store, idx);
+    } else if (target.classList.contains('action-edit')) {
+        toggleEditState(li, true);
+        li.querySelector('.account-name-input').onclick = (e) => e.stopPropagation();
+    } else if (target.classList.contains('action-save')) {
+        const newName = li.querySelector('.account-name-input').value.trim();
+        if (newName) {
+            const newAccounts = [...accounts];
+            newAccounts[idx].name = newName;
+            
+            chrome.storage.local.set({ [STORAGE_KEY]: newAccounts }).then(() => {
+                store.setState({ accounts: newAccounts });
+                showToast("已更新");
+                toggleEditState(li, false);
+            });
+        }
+    } else if (target.classList.contains('action-delete')) {
+        if(confirm("确定删除?")) {
+            const newAccounts = accounts.filter((_, i) => i !== idx);
+            const newAccountKeySet = new Set(newAccounts.map(a => a.key));
+            
+            chrome.storage.local.set({ [STORAGE_KEY]: newAccounts }).then(() => {
+                store.setState({ accounts: newAccounts, accountKeySet: newAccountKeySet });
+            });
+        }
+    }
+}
+
+function importData(e, store) {
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+        try {
+            const json = JSON.parse(ev.target.result);
+            if(Array.isArray(json)) {
+                const { accounts, accountKeySet } = store.getState();
+                let newAccounts = [...accounts];
+                let newKeys = new Set(accountKeySet);
+                let addedCount = 0;
+
+                json.forEach(a => {
+                    if (a.key && !newKeys.has(a.key)) {
+                        newAccounts.push(a);
+                        newKeys.add(a.key);
+                        addedCount++;
+                    }
+                });
+                
+                if (addedCount > 0) {
+                    await chrome.storage.local.set({ [STORAGE_KEY]: newAccounts });
+                    store.setState({ accounts: newAccounts, accountKeySet: newKeys });
+                    showToast(`导入 ${addedCount} 个账号`);
+                } else {
+                    showToast("没有新账号");
+                }
+            }
+        } catch { showToast("格式错误"); }
+    };
+    if(e.target.files[0]) reader.readAsText(e.target.files[0]);
+}
+
+function clearData(store) {
+    if(confirm("清空不可恢复!")) {
+        chrome.storage.local.set({ [STORAGE_KEY]: [] }).then(() => {
+            store.setState({ accounts: [], accountKeySet: new Set() });
+        });
     }
 }
 
@@ -225,184 +411,23 @@ function toggleModal(show) {
     }
 }
 
-function createAccountListItem(acc, idx) {
-    const li = document.createElement('li');
-    li.className = 'account-card';
-    li.draggable = true;
-    li.dataset.index = idx;
-
-    const activeKey = getActiveKey();
-    if (acc.key === activeKey) {
-        li.classList.add('active');
-    }
-
-    let badges = acc.key === activeKey ? `<span class="badge badge-current">Current</span>` : '';
-    const now = Date.now();
-    if (acc.availableAt && acc.availableAt > now) {
-        const min = Math.ceil((acc.availableAt - now) / 60000);
-        badges += `<span class="badge badge-limit">⏳ ${min > 60 ? Math.floor(min/60)+'h' : min+'m'}</span>`;
-    }
-
-    li.innerHTML = `
-        <div class="account-info">
-            <div class="account-header">
-                <span class="account-name">${acc.name || '未命名'}</span>
-                <input type="text" class="account-name-input" value="${acc.name || '未命名'}" style="display:none;" />
-                <div class="badges">${badges}</div>
-            </div>
-            <div class="account-key">${acc.key.slice(0,10)}...${acc.key.slice(-6)}</div>
-        </div>
-        <div class="account-actions">
-            <button class="icon-btn action-limit">${ICONS.clock}</button>
-            <button class="icon-btn action-copy">${ICONS.copy}</button>
-            <button class="icon-btn action-grab">${ICONS.grab}</button>
-            <button class="icon-btn action-edit">${ICONS.edit}</button>
-            <button class="icon-btn action-save" style="display:none;">${ICONS.save}</button>
-            <button class="icon-btn action-delete delete">${ICONS.trash}</button>
-        </div>`;
-
-    // Drag Events
-    li.ondragstart = () => { dragSourceIndex = idx; li.classList.add('dragging'); };
-    li.ondragover = e => { e.preventDefault(); li.classList.add('drag-over'); };
-    li.ondragleave = () => li.classList.remove('drag-over');
-    li.ondrop = async (e) => {
-        e.stopPropagation();
-        li.classList.remove('drag-over');
-        if(dragSourceIndex === idx) return;
-        accounts.splice(idx, 0, accounts.splice(dragSourceIndex, 1)[0]);
-        await chrome.storage.local.set({ [STORAGE_KEY]: accounts });
-        render();
-    };
-    li.ondragend = () => { li.classList.remove('dragging'); document.querySelectorAll('.drag-over').forEach(e=>e.classList.remove('drag-over')); };
-    
-    return li;
-}
-
-async function render() {
-    const list = $('accountList');
-    list.innerHTML = '';
-    const filter = $('searchBox').value.toLowerCase();
-
-    const filteredAccounts = accounts.filter(acc => !filter || acc.name.toLowerCase().includes(filter));
-
-    if (filteredAccounts.length === 0) {
-        list.innerHTML = `<div class="empty-state">📭 无账号</div>`;
-        return;
-    }
-
-    filteredAccounts.forEach((acc, idx) => {
-        const listItem = createAccountListItem(acc, accounts.indexOf(acc));
-        list.appendChild(listItem);
-    });
-}
-
-function getActiveKey() {
-    const cookie = chrome.cookies.get({ url: CLAUDE_URL, name: COOKIE_NAME }).catch(() => null);
+async function getActiveKey() {
+    const cookie = await chrome.cookies.get({ url: CLAUDE_URL, name: COOKIE_NAME }).catch(() => null);
     return cookie ? decodeURIComponent(cookie.value) : "";
 }
 
 function toggleEditState(li, isEditing) {
-    const nameSpan = li.querySelector('.account-name');
-    const nameInput = li.querySelector('.account-name-input');
-    const editBtn = li.querySelector('.action-edit');
-    const saveBtn = li.querySelector('.action-save');
-
-    nameSpan.style.display = isEditing ? 'none' : 'inline-block';
-    nameInput.style.display = isEditing ? 'inline-block' : 'none';
-    editBtn.style.display = isEditing ? 'none' : 'inline-block';
-    saveBtn.style.display = isEditing ? 'inline-block' : 'none';
+    li.querySelector('.account-name').style.display = isEditing ? 'none' : 'inline-block';
+    li.querySelector('.account-name-input').style.display = isEditing ? 'inline-block' : 'none';
+    li.querySelector('.action-edit').style.display = isEditing ? 'none' : 'inline-block';
+    li.querySelector('.action-save').style.display = isEditing ? 'inline-block' : 'none';
 
     if (isEditing) {
-        nameInput.focus();
-        nameInput.select();
+        li.querySelector('.account-name-input').focus();
+        li.querySelector('.account-name-input').select();
     }
 }
 
-function handleListClick(e) {
-    const li = e.target.closest('li');
-    if (!li) return;
-    const idx = parseInt(li.dataset.index);
-    const acc = accounts[idx];
-
-    if (e.target.closest('.action-limit')) {
-        const h = parseFloat(prompt("冷却时间(小时), 0清除:", "4"));
-        if (!isNaN(h)) {
-            if (h <= 0) {
-                delete acc.availableAt;
-            } else {
-                acc.availableAt = Date.now() + (h * 3600000);
-            }
-            chrome.storage.local.set({ [STORAGE_KEY]: accounts }).then(() => {
-                const badgesContainer = li.querySelector('.badges');
-                const existingBadge = badgesContainer.querySelector('.badge-limit');
-                if (existingBadge) {
-                    existingBadge.remove();
-                }
-
-                if (acc.availableAt) {
-                    const now = Date.now();
-                    if (acc.availableAt > now) {
-                        const min = Math.ceil((acc.availableAt - now) / 60000);
-                        const newBadge = document.createElement('span');
-                        newBadge.className = 'badge badge-limit';
-                        newBadge.innerHTML = `⏳ ${min > 60 ? Math.floor(min/60)+'h' : min+'m'}`;
-                        badgesContainer.appendChild(newBadge);
-                    }
-                }
-            });
-        }
-    } else if (e.target.closest('.action-copy')) {
-        navigator.clipboard.writeText(acc.key);
-        showToast("已复制");
-    } else if (e.target.closest('.action-grab')) {
-        grabKey(idx);
-    } else if (e.target.closest('.action-edit')) {
-        toggleEditState(li, true);
-        li.querySelector('.account-name-input').onclick = (e) => e.stopPropagation();
-    } else if (e.target.closest('.action-save')) {
-        const nameInput = li.querySelector('.account-name-input');
-        const newName = nameInput.value.trim();
-        if (newName) {
-            acc.name = newName;
-            chrome.storage.local.set({ [STORAGE_KEY]: accounts }).then(() => {
-                showToast("已更新");
-                li.querySelector('.account-name').textContent = newName;
-                toggleEditState(li, false);
-            });
-        }
-    } else if (e.target.closest('.action-delete')) {
-        if(confirm("确定删除?")) {
-            // Optimization: Remove from Set
-            accountKeySet.delete(acc.key);
-            accounts.splice(idx, 1);
-            chrome.storage.local.set({ [STORAGE_KEY]: accounts }).then(() => {
-                li.remove();
-                const list = $('accountList');
-                if (!list.hasChildNodes()) {
-                    list.innerHTML = `<div class="empty-state">📭 无账号</div>`;
-                }
-            });
-        }
-    } else {
-        switchAccount(acc.key);
-    }
-}
-
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-        const activeEl = document.activeElement;
-        if (activeEl && activeEl.classList.contains('account-name-input')) {
-            const li = activeEl.closest('li');
-            if (li) {
-                const saveBtn = li.querySelector('.action-save');
-                saveBtn.click();
-            }
-        }
-    }
-});
-
-// --- Utils ---
-// Optimization: Debounce Function
 function debounce(func, wait) {
     let timeout;
     return function(...args) {
@@ -417,20 +442,18 @@ async function checkNetwork() {
         const res = await fetch('https://ipwho.is/');
         const data = await res.json();
         if(data.success) {
-            $('ipText').textContent = currentIP = data.ip;
+            window.store.setState({ currentIP: data.ip });
+            $('ipText').textContent = data.ip;
             $('geoText').textContent = `${data.city}, ${data.country_code}`;
             $('netDot').classList.add('online');
         }
-    } catch { $('ipText').textContent = "Error"; }
+    } catch { 
+        $('ipText').textContent = "Error"; 
+        window.store.setState({ currentIP: null });
+    }
 }
 
-function toggleTheme() {
-    isDark = !isDark;
-    applyTheme();
-    chrome.storage.local.set({ [THEME_KEY]: isDark ? 'dark' : 'light' });
-}
-
-function applyTheme() {
+function applyTheme(isDark) {
     document.body.classList.toggle('dark-mode', isDark);
     $('themeBtn').innerHTML = isDark ? ICONS.sun : ICONS.moon;
 }
@@ -442,46 +465,10 @@ function showToast(msg) {
     setTimeout(() => el.classList.remove('visible'), 3000);
 }
 
-function exportData() {
+function exportData(accounts) {
     const blob = new Blob([JSON.stringify(accounts, null, 2)], {type:'application/json'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = `claude_accounts.json`; a.click();
-}
-
-function importData(e) {
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-        try {
-            const json = JSON.parse(ev.target.result);
-            if(Array.isArray(json)) {
-                let addedCount = 0;
-                json.forEach(a => {
-                    // Optimization: O(1) Check
-                    if(!accountKeySet.has(a.key)) {
-                        accounts.push(a);
-                        accountKeySet.add(a.key);
-                        addedCount++;
-                    }
-                });
-                
-                if (addedCount > 0) {
-                    await chrome.storage.local.set({ [STORAGE_KEY]: accounts });
-                    render(); 
-                    showToast(`导入 ${addedCount} 个账号`);
-                } else {
-                    showToast("没有新账号");
-                }
-            }
-        } catch { showToast("格式错误"); }
-    };
-    if(e.target.files[0]) reader.readAsText(e.target.files[0]);
-}
-
-function clearData() {
-    if(confirm("清空不可恢复!")) {
-        accounts = [];
-        accountKeySet.clear(); // Optimization: Clear Set
-        chrome.storage.local.set({ [STORAGE_KEY]: [] }).then(render);
-    }
+    URL.revokeObjectURL(url);
 }
