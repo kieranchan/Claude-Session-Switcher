@@ -17,7 +17,8 @@ const ICONS = {
     sun: `<svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`,
     moon: `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`,
     login: `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>`,
-    save: `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>`
+    save: `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>`,
+    grab: `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`
 };
 
 const $ = id => document.getElementById(id);
@@ -91,12 +92,12 @@ async function saveAccount() {
     render();
 }
 
-async function grabKey() {
+async function grabKey(index = -1) {
     try {
         const cookie = await chrome.cookies.get({ url: CLAUDE_URL, name: COOKIE_NAME });
         if (!cookie) return showToast("未登录");
         
-        $('inputKey').value = decodeURIComponent(cookie.value);
+        const key = decodeURIComponent(cookie.value);
         
         // 1. Try DOM (Best for exact UI name)
         let foundName = null;
@@ -116,7 +117,7 @@ async function grabKey() {
             try {
                 const res = await fetch("https://claude.ai/api/organizations", {
                     method: "GET",
-                    headers: { "Content-Type": "application/json" }
+                    headers: { "Content-Type": "application/json", "Cookie": `${COOKIE_NAME}=${key}` }
                 });
                 if (res.ok) {
                     const data = await res.json();
@@ -125,8 +126,22 @@ async function grabKey() {
             } catch (e) { console.log("API grab failed", e); }
         }
 
-        if (foundName) $('inputName').value = foundName;
-        $('inputName').focus();
+        if (index >= 0) {
+            if (foundName) {
+                accounts[index].name = foundName;
+                await chrome.storage.local.set({ [STORAGE_KEY]: accounts });
+                render();
+                showToast("用户名已更新");
+            } else {
+                showToast("未能获取用户名");
+            }
+        } else {
+            $('inputKey').value = key;
+            if (foundName) {
+                $('inputName').value = foundName;
+            }
+            $('inputName').focus();
+        }
     } catch { showToast("获取失败"); }
 }
 
@@ -209,6 +224,7 @@ async function render() {
             <div class="account-actions">
                 <button class="icon-btn action-limit">${ICONS.clock}</button>
                 <button class="icon-btn action-copy">${ICONS.copy}</button>
+                <button class="icon-btn action-grab">${ICONS.grab}</button>
                 <button class="icon-btn action-edit">${ICONS.edit}</button>
                 <button class="icon-btn action-save" style="display:none;">${ICONS.save}</button>
                 <button class="icon-btn action-delete delete">${ICONS.trash}</button>
@@ -255,12 +271,15 @@ function handleListClick(e) {
     } else if (e.target.closest('.action-copy')) {
         navigator.clipboard.writeText(acc.key);
         showToast("已复制");
+    } else if (e.target.closest('.action-grab')) {
+        grabKey(idx);
     } else if (e.target.closest('.action-edit')) {
         nameSpan.style.display = 'none';
         nameInput.style.display = 'inline-block';
         nameInput.focus();
         editBtn.style.display = 'none';
         saveBtn.style.display = 'inline-block';
+        nameInput.onclick = (e) => e.stopPropagation();
     } else if (e.target.closest('.action-save')) {
         const newName = nameInput.value.trim();
         if (newName) {
