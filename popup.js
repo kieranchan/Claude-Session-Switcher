@@ -16,7 +16,8 @@ const ICONS = {
     clock: `<svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
     sun: `<svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`,
     moon: `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`,
-    login: `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>`
+    login: `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>`,
+    save: `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>`
 };
 
 const $ = id => document.getElementById(id);
@@ -24,7 +25,6 @@ let accounts = [];
 // Optimization: Hash Map (Set) for O(1) duplicate key checks
 const accountKeySet = new Set();
 
-let editingIndex = -1;
 let dragSourceIndex = -1;
 let isDark = false;
 let currentIP = null;
@@ -78,32 +78,14 @@ async function saveAccount() {
     if (!name || !key) return showToast("请填写完整");
     if (key.startsWith('"') && key.endsWith('"')) key = key.slice(1, -1);
 
-    if (editingIndex >= 0) {
-        // Edit Mode
-        const oldKey = accounts[editingIndex].key;
-        
-        // If key changed, check for collision
-        if (key !== oldKey && accountKeySet.has(key)) {
-            return showToast("Key 已存在");
-        }
-
-        // Update Set: Remove old, Add new
-        if (key !== oldKey) {
-            accountKeySet.delete(oldKey);
-            accountKeySet.add(key);
-        }
-
-        accounts[editingIndex] = { ...accounts[editingIndex], name, key };
-        showToast("已更新");
-    } else {
-        // Add Mode
-        // Optimization: O(1) Lookup
-        if (accountKeySet.has(key)) return showToast("Key 已存在");
-        
-        accounts.push({ name, key });
-        accountKeySet.add(key);
-        showToast("已保存");
-    }
+    // Add Mode
+    // Optimization: O(1) Lookup
+    if (accountKeySet.has(key)) return showToast("Key 已存在");
+    
+    accounts.push({ name, key });
+    accountKeySet.add(key);
+    showToast("已保存");
+    
     await chrome.storage.local.set({ [STORAGE_KEY]: accounts });
     toggleModal(false);
     render();
@@ -183,13 +165,12 @@ async function logoutAndLogin() {
 function toggleModal(show) {
     const el = $('editForm'), overlay = $('modalOverlay');
     if (show) {
-        $('modalTitle').textContent = editingIndex === -1 ? "添加账号" : "编辑账号";
+        $('modalTitle').textContent = "添加账号";
         el.classList.add('open'); overlay.classList.add('open');
         $('inputName').focus();
     } else {
         el.classList.remove('open'); overlay.classList.remove('open');
         $('inputName').value = $('inputKey').value = '';
-        editingIndex = -1;
     }
 }
 
@@ -218,13 +199,18 @@ async function render() {
 
         li.innerHTML = `
             <div class="account-info">
-                <div class="account-header"><span class="account-name">${acc.name || '未命名'}</span><div class="badges">${badges}</div></div>
+                <div class="account-header">
+                    <span class="account-name">${acc.name || '未命名'}</span>
+                    <input type="text" class="account-name-input" value="${acc.name || '未命名'}" style="display:none;" />
+                    <div class="badges">${badges}</div>
+                </div>
                 <div class="account-key">${acc.key.slice(0,10)}...${acc.key.slice(-6)}</div>
             </div>
             <div class="account-actions">
                 <button class="icon-btn action-limit">${ICONS.clock}</button>
                 <button class="icon-btn action-copy">${ICONS.copy}</button>
                 <button class="icon-btn action-edit">${ICONS.edit}</button>
+                <button class="icon-btn action-save" style="display:none;">${ICONS.save}</button>
                 <button class="icon-btn action-delete delete">${ICONS.trash}</button>
             </div>`;
         
@@ -254,6 +240,11 @@ function handleListClick(e) {
     const idx = parseInt(li.dataset.index);
     const acc = accounts[idx];
 
+    const nameSpan = li.querySelector('.account-name');
+    const nameInput = li.querySelector('.account-name-input');
+    const editBtn = li.querySelector('.action-edit');
+    const saveBtn = li.querySelector('.action-save');
+
     if (e.target.closest('.action-limit')) {
         const h = parseFloat(prompt("冷却时间(小时), 0清除:", "4"));
         if (!isNaN(h)) {
@@ -265,10 +256,20 @@ function handleListClick(e) {
         navigator.clipboard.writeText(acc.key);
         showToast("已复制");
     } else if (e.target.closest('.action-edit')) {
-        editingIndex = idx;
-        $('inputName').value = acc.name;
-        $('inputKey').value = acc.key;
-        toggleModal(true);
+        nameSpan.style.display = 'none';
+        nameInput.style.display = 'inline-block';
+        nameInput.focus();
+        editBtn.style.display = 'none';
+        saveBtn.style.display = 'inline-block';
+    } else if (e.target.closest('.action-save')) {
+        const newName = nameInput.value.trim();
+        if (newName) {
+            acc.name = newName;
+            chrome.storage.local.set({ [STORAGE_KEY]: accounts }).then(() => {
+                showToast("已更新");
+                render();
+            });
+        }
     } else if (e.target.closest('.action-delete')) {
         if(confirm("确定删除?")) {
             // Optimization: Remove from Set
@@ -280,6 +281,19 @@ function handleListClick(e) {
         switchAccount(acc.key);
     }
 }
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        const activeEl = document.activeElement;
+        if (activeEl && activeEl.classList.contains('account-name-input')) {
+            const li = activeEl.closest('li');
+            if (li) {
+                const saveBtn = li.querySelector('.action-save');
+                saveBtn.click();
+            }
+        }
+    }
+});
 
 // --- Utils ---
 // Optimization: Debounce Function

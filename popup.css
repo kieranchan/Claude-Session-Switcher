@@ -300,6 +300,21 @@ main {
     color: var(--text-main);
 }
 
+.account-name-input {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-main);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--primary-color);
+    width: 80%;
+    display: none;
+}
+
+.account-name-input:focus {
+    outline: none;
+}
+
 .badges {
     display: flex;
     gap: 4px;

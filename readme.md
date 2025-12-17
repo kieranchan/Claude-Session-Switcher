@@ -27,6 +27,7 @@ A lightweight, efficient Chrome Extension designed to manage and switch between 
     * Compact status bar showing **IP** and **Location**.
     * **One-Click Check**: Dedicated button to analyze IP risk score via external services.
 * **✏️ Modal Editing**: Add or edit accounts in a focused, non-intrusive modal overlay.
+* **✍️ Inline Editing**: Click the edit icon next to an account to edit its name directly in the list.
 * **🖱️ Drag & Drop Sorting**: Organize your account list order simply by dragging items.
 * **💾 Import & Export**: Backup your accounts to JSON.
 * **🔒 Secure & Local**: 
