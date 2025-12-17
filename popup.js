@@ -103,6 +103,31 @@ function AccountCard(account, index, store) {
         if (e.target.closest('.account-actions')) return;
         switchAccount(account.key);
     });
+    
+    // Drag Events
+    li.ondragstart = () => { 
+        window.dragSourceIndex = index; 
+        li.classList.add('dragging'); 
+    };
+    li.ondragover = e => { e.preventDefault(); li.classList.add('drag-over'); };
+    li.ondragleave = () => li.classList.remove('drag-over');
+    li.ondrop = async (e) => {
+        e.stopPropagation();
+        li.classList.remove('drag-over');
+        if (window.dragSourceIndex === index) return;
+        
+        const { accounts } = store.getState();
+        const newAccounts = [...accounts];
+        const [draggedItem] = newAccounts.splice(window.dragSourceIndex, 1);
+        newAccounts.splice(index, 0, draggedItem);
+
+        await chrome.storage.local.set({ [STORAGE_KEY]: newAccounts });
+        store.setState({ accounts: newAccounts });
+    };
+    li.ondragend = () => { 
+        li.classList.remove('dragging');
+        document.querySelectorAll('.drag-over').forEach(e => e.classList.remove('drag-over'));
+    };
 
     return { element: li, update };
 }
