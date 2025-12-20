@@ -51,16 +51,17 @@
 
 ## 📦 安装指南
 
-由于本插件处理敏感的 Session Key，为了最大的安全透明度，建议采用**本地安装**（旁加载）方式。
+本扩展提供两种安装方式：直接加载源代码（适用于开发者）和安装预打包的文件（适用于普通用户）。
+
+**关于这两种方式的详细图文步骤，请查阅我们的 [安装指南](install-guide.md)。**
+
+### 开发者快速上手
 
 1.  **克隆或下载** 本仓库。
-    ```bash
-    git clone https://github.com/yourusername/claude-switcher.git
-    ```
-2.  打开 Chrome 浏览器，访问 `chrome://extensions/`。
+2.  打开 Chrome 浏览器并访问 `chrome://extensions/`。
 3.  打开右上角的 **开发者模式 (Developer mode)** 开关。
 4.  点击左上角的 **加载已解压的扩展程序 (Load unpacked)**。
-5.  选择您下载/克隆的项目文件夹。
+5.  选择本项目的文件夹。
 
 ## 📖 使用说明
 

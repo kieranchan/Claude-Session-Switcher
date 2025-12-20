@@ -57,45 +57,60 @@ function AccountCard(account, index, store) {
     li.draggable = true;
     li.dataset.index = index;
 
+    const accountInfo = document.createElement('div');
+    accountInfo.className = 'account-info';
+
+    const accountHeader = document.createElement('div');
+    accountHeader.className = 'account-header';
+
+    const accountName = document.createElement('span');
+    accountName.className = 'account-name';
+
+    const accountNameInput = document.createElement('input');
+    accountNameInput.type = 'text';
+    accountNameInput.className = 'account-name-input';
+    accountNameInput.style.display = 'none';
+
+    const badges = document.createElement('div');
+    badges.className = 'badges';
+
+    accountHeader.append(accountName, accountNameInput, badges);
+
+    const accountKey = document.createElement('div');
+    accountKey.className = 'account-key';
+    accountKey.textContent = `${account.key.slice(0,10)}...${account.key.slice(-6)}`;
+
+    accountInfo.append(accountHeader, accountKey);
+
+    const accountActions = document.createElement('div');
+    accountActions.className = 'account-actions';
+    accountActions.innerHTML = `
+        <button class="icon-btn action-limit" title="Set Cooldown">${ICONS.clock}</button>
+        <button class="icon-btn action-copy" title="Copy Key">${ICONS.copy}</button>
+        <button class="icon-btn action-grab" title="Grab Username">${ICONS.grab}</button>
+        <button class="icon-btn action-edit" title="Edit Name">${ICONS.edit}</button>
+        <button class="icon-btn action-save" title="Save Name" style="display:none;">${ICONS.save}</button>
+        <button class="icon-btn action-delete delete" title="Delete Account">${ICONS.trash}</button>
+    `;
+
+    li.append(accountInfo, accountActions);
+
     const update = (newAccount) => {
         account = newAccount;
         const { activeKey } = store.getState();
         li.classList.toggle('active', account.key === activeKey);
 
-        let badges = account.key === activeKey ? `<span class="badge badge-current">Current</span>` : '';
+        let badgeHTML = account.key === activeKey ? `<span class="badge badge-current">Current</span>` : '';
         const now = Date.now();
         if (account.availableAt && account.availableAt > now) {
             const min = Math.ceil((account.availableAt - now) / 60000);
-            badges += `<span class="badge badge-limit">⏳ ${min > 60 ? Math.floor(min/60)+'h' : min+'m'}</span>`;
+            badgeHTML += `<span class="badge badge-limit">⏳ ${min > 60 ? Math.floor(min/60)+'h' : min+'m'}</span>`;
         }
         
-        const nameEl = li.querySelector('.account-name');
-        if(nameEl) nameEl.textContent = account.name || '未命名';
-        
-        const nameInputEl = li.querySelector('.account-name-input');
-        if(nameInputEl) nameInputEl.value = account.name || '未命名';
-        
-        const badgesEl = li.querySelector('.badges');
-        if(badgesEl) badgesEl.innerHTML = badges;
+        accountName.textContent = account.name || '未命名';
+        accountNameInput.value = account.name || '未命名';
+        badges.innerHTML = badgeHTML;
     };
-
-    li.innerHTML = `
-        <div class="account-info">
-            <div class="account-header">
-                <span class="account-name"></span>
-                <input type="text" class="account-name-input" style="display:none;" />
-                <div class="badges"></div>
-            </div>
-            <div class="account-key">${account.key.slice(0,10)}...${account.key.slice(-6)}</div>
-        </div>
-        <div class="account-actions">
-            <button class="icon-btn action-limit" title="Set Cooldown">${ICONS.clock}</button>
-            <button class="icon-btn action-copy" title="Copy Key">${ICONS.copy}</button>
-            <button class="icon-btn action-grab" title="Grab Username">${ICONS.grab}</button>
-            <button class="icon-btn action-edit" title="Edit Name">${ICONS.edit}</button>
-            <button class="icon-btn action-save" title="Save Name" style="display:none;">${ICONS.save}</button>
-            <button class="icon-btn action-delete delete" title="Delete Account">${ICONS.trash}</button>
-        </div>`;
 
     update(account);
 
@@ -134,24 +149,43 @@ function AccountCard(account, index, store) {
 
 function App(store) {
     const listEl = $('accountList');
-    let components = [];
+    const components = new Map();
 
     const render = (state) => {
-        listEl.innerHTML = '';
         const { accounts, filter } = state;
-        
         const filteredAccounts = accounts.filter(acc => !filter || acc.name.toLowerCase().includes(filter.toLowerCase()));
 
         if (filteredAccounts.length === 0) {
             listEl.innerHTML = `<div class="empty-state">📭 无账号</div>`;
+            components.clear();
             return;
         }
 
-        components = filteredAccounts.map((acc, idx) => {
+        const newKeys = new Set(filteredAccounts.map(acc => acc.key));
+
+        // Remove old components
+        for (const [key, component] of components.entries()) {
+            if (!newKeys.has(key)) {
+                component.element.remove();
+                components.delete(key);
+            }
+        }
+
+        // Add/update components
+        filteredAccounts.forEach((acc, idx) => {
             const originalIndex = accounts.indexOf(acc);
-            const card = AccountCard(acc, originalIndex, store);
-            listEl.appendChild(card.element);
-            return card;
+            if (components.has(acc.key)) {
+                const component = components.get(acc.key);
+                component.update(acc);
+                //- Reorder if necessary
+                if (listEl.children[idx] !== component.element) {
+                    listEl.insertBefore(component.element, listEl.children[idx]);
+                }
+            } else {
+                const card = AccountCard(acc, originalIndex, store);
+                listEl.insertBefore(card.element, listEl.children[idx]);
+                components.set(acc.key, card);
+            }
         });
     };
     
@@ -232,7 +266,12 @@ async function saveAccount(store) {
     if (key.startsWith('"') && key.endsWith('"')) key = key.slice(1, -1);
 
     const { accounts, accountKeySet } = store.getState();
-    if (accountKeySet.has(key)) return showToast("Key 已存在");
+    if (accountKeySet.has(key)) {
+        showToast("Key 已存在，将自动切换");
+        switchAccount(key);
+        toggleModal(false);
+        return;
+    }
 
     const newAccount = { name, key };
     const newAccounts = [...accounts, newAccount];
@@ -252,20 +291,20 @@ async function grabKey(store, index = -1) {
         const cookie = await chrome.cookies.get({ url: CLAUDE_URL, name: COOKIE_NAME });
         if (!cookie) return showToast("未登录");
         const key = decodeURIComponent(cookie.value);
-        
-        let foundName = null;
-        const tabs = await chrome.tabs.query({ url: "https://claude.ai/*" });
-        if (tabs.length > 0) {
-            try {
-                const res = await chrome.scripting.executeScript({
-                    target: { tabId: tabs[0].id },
-                    func: () => document.querySelector('span.w-full.text-start.block.truncate')?.textContent.trim()
-                });
-                if (res?.[0]?.result) foundName = res[0].result;
-            } catch (e) { console.log("DOM grab failed", e); }
-        }
 
-        if (!foundName) {
+        const foundName = await (async () => {
+            const tabs = await chrome.tabs.query({ url: "https://claude.ai/*" });
+            if (tabs.length > 0) {
+                try {
+                    const res = await chrome.scripting.executeScript({
+                        target: { tabId: tabs[0].id },
+                        func: () => document.querySelector('span.w-full.text-start.block.truncate')?.textContent.trim()
+                    });
+                    if (res?.[0]?.result) return res[0].result;
+                } catch (e) {
+                    console.log("DOM grab failed", e);
+                }
+            }
             try {
                 const res = await fetch("https://claude.ai/api/organizations", {
                     method: "GET",
@@ -273,10 +312,13 @@ async function grabKey(store, index = -1) {
                 });
                 if (res.ok) {
                     const data = await res.json();
-                    if (data?.[0]?.name) foundName = data[0].name;
+                    if (data?.[0]?.name) return data[0].name;
                 }
-            } catch (e) { console.log("API grab failed", e); }
-        }
+            } catch (e) {
+                console.log("API grab failed", e);
+            }
+            return null;
+        })();
 
         if (index >= 0) {
             if (foundName) {
@@ -295,7 +337,9 @@ async function grabKey(store, index = -1) {
             if (foundName) $('inputName').value = foundName;
             $('inputName').focus();
         }
-    } catch { showToast("获取失败"); }
+    } catch {
+        showToast("获取失败");
+    }
 }
 
 async function switchAccount(key) {

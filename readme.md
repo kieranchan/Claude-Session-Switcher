@@ -51,16 +51,17 @@ A lightweight, efficient Chrome Extension designed to manage and switch between 
 
 ## 📦 Installation
 
-Since this extension handles sensitive session keys, it is designed to be installed locally (Side-loaded) for maximum security transparency.
+This extension can be installed in two ways: by loading the source code directly (for developers) or by installing a pre-packaged file (for users).
+
+**For a detailed, step-by-step guide for all user types, please see our [Installation Guide](install-guide.md).**
+
+### Quick Start for Developers
 
 1.  **Clone or Download** this repository.
-    ```bash
-    git clone https://github.com/yourusername/claude-switcher.git
-    ```
 2.  Open Chrome and navigate to `chrome://extensions/`.
 3.  Toggle **Developer mode** in the top right corner.
 4.  Click **Load unpacked**.
-5.  Select the folder where you cloned/downloaded this project.
+5.  Select the project folder.
 
 ## 📖 Usage Guide
 

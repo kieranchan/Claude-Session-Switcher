@@ -2,8 +2,12 @@
 
 // Configuration
 const CONFIG = {
-    // Regex matches: "until 5 PM", "until 10:30 AM", etc.
-    LIMIT_REGEX: /until\s+(\d{1,2}(?::\d{2})?\s*(?:AM|PM))/i,
+    // An array of regexes to test against.
+    // Each regex must capture the time part (e.g., "5 PM" or "11:00 PM") in its first group.
+    LIMIT_REGEXES: [
+        /until\s+(\d{1,2}(?::\d{2})?\s*(?:AM|PM))/i, // Free account: "available again until 5 PM"
+        /Resets\s+(\d{1,2}:\d{2}\s*(?:AM|PM))/i      // Pro account: "Usage limit reached ∙ Resets 11:00 PM"
+    ],
     THROTTLE_MS: 2000, // Check at most every 2 seconds during active streaming
     MAX_NODES_PER_FRAME: 100 // Time slicing: Check 100 nodes per frame to avoid freezing
 };
@@ -15,8 +19,6 @@ let observer = null;
 // --- Initialization ---
 
 function init() {
-    // Use MutationObserver to detect changes efficiently
-    // We observe the body for added nodes (toast messages or new chat bubbles)
     observer = new MutationObserver(handleMutations);
     observer.observe(document.body, {
         childList: true,
@@ -39,71 +41,71 @@ function handleMutations(mutations) {
     }, CONFIG.THROTTLE_MS);
 }
 
-// --- Optimization Strategy: Time Slicing & TreeWalker ---
+// --- Recursive search function to pierce Shadow DOM ---
 
 function scheduleCheck() {
     if (isProcessing) return;
     isProcessing = true;
-
-    // Use requestAnimationFrame to run check without blocking UI thread
-    requestAnimationFrame(() => performOptimizedSearch());
-}
-
-function performOptimizedSearch() {
-    try {
-        // Optimization: Create a TreeWalker to iterate ONLY text nodes.
-        // We start from the end of the document because "Limit" messages 
-        // usually appear at the bottom (chat stream) or as appended Toasts.
-        const walker = document.createTreeWalker(
-            document.body,
-            NodeFilter.SHOW_TEXT,
-            {
-                acceptNode: function(node) {
-                    // Filter out hidden/irrelevant nodes if possible to save regex cycles
-                    // (Note: checking visibility is expensive, so we skip that and rely on fast regex)
-                    const txt = node.nodeValue;
-                    // Pre-filter: fast string check before regex
-                    if (txt && txt.length > 5 && txt.includes("until")) {
-                        return NodeFilter.FILTER_ACCEPT;
-                    }
-                    return NodeFilter.FILTER_SKIP;
-                }
-            }
-        );
-
-        // Move to the last node to start reverse traversal
-        let currentNode = walker.lastChild(); 
-        
-        let nodesChecked = 0;
-        let matchFound = false;
-
-        // Process nodes in chunks (Time Slicing logic could be expanded here if needed, 
-        // but since we filter 'until' strictly, iteration is extremely fast)
-        while (currentNode) {
-            const text = currentNode.nodeValue;
-            const match = text.match(CONFIG.LIMIT_REGEX);
-            
-            if (match) {
-                const timeStr = match[1];
-                markAccountLimited(timeStr);
-                matchFound = true;
-                break; // Early exit immediately upon finding
-            }
-
-            // Safety break to prevent infinite loops in weird DOMs
-            if (++nodesChecked > 5000) break; 
-
-            currentNode = walker.previousNode();
+    requestAnimationFrame(() => {
+        try {
+            searchForLimitText(document.body);
+        } catch(e) {
+            console.error("Claude Switcher: Error during limit search", e);
+        } finally {
+            isProcessing = false;
         }
-
-    } catch (e) {
-        console.error("Claude Switcher: Search error", e);
-    } finally {
-        isProcessing = false;
-    }
+    });
 }
 
-// --- Logic: Account Marking (Unchanged) ---
+function searchForLimitText(rootNode) {
+    // 1. Search text nodes in the current root
+    const walker = document.createTreeWalker(
+        rootNode,
+        NodeFilter.SHOW_TEXT,
+        {
+            acceptNode: function(node) {
+                const txt = node.nodeValue.trim();
+                 if (txt && txt.length > 5 && (txt.includes("until") || txt.includes("Resets") || txt.includes("limit"))) {
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+                return NodeFilter.FILTER_SKIP;
+            }
+        }
+    );
+
+    let currentNode = walker.lastChild();
+    while (currentNode) {
+        const text = currentNode.nodeValue;
+        let match = null;
+
+        for (const regex of CONFIG.LIMIT_REGEXES) {
+            match = text.match(regex);
+            if (match) break;
+        }
+        
+        if (match) {
+            const timeStr = match[1];
+            markAccountLimited(timeStr);
+            return true; // Found, stop all searching
+        }
+        currentNode = walker.previousNode();
+    }
+
+    // 2. Recurse into Shadow DOMs
+    const allElements = rootNode.querySelectorAll('*');
+    for (const element of allElements) {
+        if (element.shadowRoot) {
+            if (searchForLimitText(element.shadowRoot)) {
+                return true; // Found in a nested shadow DOM
+            }
+        }
+    }
+
+    return false; // Not found in this root or any of its children
+}
+
+
+// --- Logic: Account Marking ---
 
 async function markAccountLimited(timeStr) {
     try {
@@ -123,7 +125,9 @@ async function markAccountLimited(timeStr) {
         await chrome.storage.local.set({ accounts });
         
         showToast(`Limit detected: ${timeStr}`);
-    } catch (e) {}
+    } catch (e) {
+        console.error("Claude Switcher: Error in markAccountLimited function.", e);
+    }
 }
 
 function parseNextTimeOccurrence(timeStr) {
@@ -136,13 +140,11 @@ function parseNextTimeOccurrence(timeStr) {
     hours = parseInt(hours, 10);
     minutes = minutes ? parseInt(minutes, 10) : 0;
     
-    if (modifier.toUpperCase() === 'PM' && hours < 12) hours += 12;
-    if (modifier.toUpperCase() === 'AM' && hours === 12) hours = 0;
+    if (modifier && modifier.toUpperCase() === 'PM' && hours < 12) hours += 12;
+    if (modifier && modifier.toUpperCase() === 'AM' && hours === 12) hours = 0;
     
     d.setHours(hours, minutes, 0, 0);
-    // If the parsed time is earlier than now (e.g. 11 PM vs 1 AM next day), add 1 day
-    // But be careful: 4 PM limit detected at 3 PM is today. 
-    // 1 AM limit detected at 11 PM is tomorrow.
+
     if (d < now) d.setDate(d.getDate() + 1);
     
     return d.getTime();
