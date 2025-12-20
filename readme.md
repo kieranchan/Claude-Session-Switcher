@@ -53,7 +53,7 @@ A lightweight, efficient Chrome Extension designed to manage and switch between 
 
 This extension can be installed in two ways: by loading the source code directly (for developers) or by installing a pre-packaged file (for users).
 
-**For a detailed, step-by-step guide for all user types, please see our [Installation Guide](install-guide.md).**
+**For a detailed, step-by-step guide for all user types, please see our [Installation Guide](install-guide.md) or the [中文安装指南](install-guide_ZH.md).**
 
 ### Quick Start for Developers
 
